@@ -1,22 +1,17 @@
 import express from 'express';
 import { 
-  adminSignup, 
-  adminLogin, 
-  adminLogout, 
-  getAdminProfile, 
-  updateAdminProfile, 
-  deleteAdminAccount 
+  registerAdmin, loginAdmin, changeAdminPassword, getCurrentAdmin,
 } from '../controllers/AdminController.js';
-import { protect } from '../middleware/AuthMiddleware.js';
+
 
 const router = express.Router();
 
-router.post('/signup', adminSignup);
-router.post('/login', adminLogin);
-router.post('/logout', adminLogout);
-router.route('/profile')
-  .get(protect, getAdminProfile)
-  .put(protect, updateAdminProfile)
-  .delete(protect, deleteAdminAccount);
+
+router.post("/login", loginAdmin);
+router.post("/register", registerAdmin);
+
+// ✅ Add authenticate middleware here
+router.put("/change-password", changeAdminPassword);
+router.get("/", getCurrentAdmin);
 
 export default router;

@@ -7,7 +7,7 @@ import {
   deleteSubService,
   getSubServicesByParent
 } from "../controllers/SubServiceController.js";
-import { protect } from "../middleware/AuthMiddleware.js";
+
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ router.get("/parent/:parentId", getSubServicesByParent);
 router.get("/:id", getSubService);
 
 // Protected admin routes
-router.use(protect);
+
 router.post("/", createSubService);
 router.put("/:id", updateSubService);
 router.delete("/:id", deleteSubService);

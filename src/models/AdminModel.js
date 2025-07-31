@@ -13,13 +13,22 @@ const adminSchema = new mongoose.Schema(
       required: true,
       unique: true,
       lowercase: true,
-      match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please fill a valid email address'],
+    },
+    phoneNumber: {
+      type: String,
+      required: true,
+      unique: true,
     },
     password: {
       type: String,
       required: true,
       minlength: 6,
-      select: false, // Don't return password in queries by default
+      select: false, // Don't return password by default
+    },
+    role: {
+      type: String,
+      enum: ["admin", "superadmin"],
+      default: "admin",
     },
     lastLogin: {
       type: Date,
@@ -28,38 +37,20 @@ const adminSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: {
-      transform: function(doc, ret) {
-        delete ret.password; // Never return password in JSON responses
-        return ret;
-      }
-    }
   }
 );
 
-// Hash password before saving
+// 🔐 Hash password before saving
 adminSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// Method to compare passwords
+// 🔍 Compare password for login
 adminSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
-};
-
-// Method to remove sensitive data when converting to JSON
-adminSchema.methods.toJSON = function() {
-  const admin = this.toObject();
-  delete admin.password;
-  return admin;
 };
 
 const Admin = mongoose.model("Admin", adminSchema);    

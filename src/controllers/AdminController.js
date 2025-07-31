@@ -1,203 +1,223 @@
-import jwt from 'jsonwebtoken';
-import Admin from '../models/AdminModel.js';
-import bcrypt from 'bcryptjs';
+import jwt from "jsonwebtoken";
+import Admin from "../models/AdminModel.js";
+import Config from "../config/Config.js";
 
-const generateToken = (adminId) => {
-  return jwt.sign({ id: adminId }, process.env.JWT_SECRET, {
-    expiresIn: '1d', // Token expires in 1 day
-  });
-};
-
-// Register Admin
-export const adminSignup = async (req, res) => {
-  const { fullName, email, password } = req.body;
-
+// 🔐 Admin Login
+export const loginAdmin = async (req, res) => {
   try {
-    // Check if admin already exists
-    const adminExists = await Admin.findOne({ email });
-    if (adminExists) {
-      return res.status(400).json({ error: "Admin already exists" });
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
+      });
     }
 
-    // Create new admin
+    const admin = await Admin.findOne({ email }).select("+password");
+    if (!admin || !(await admin.comparePassword(password))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    const { accessToken, refreshToken } = generateTokens(admin);
+    admin.lastLogin = Date.now();
+    await admin.save();
+
+    const accessTokenExpiresMs = parseInt(Config.jwtAccessTokenExpiresIn) * 1000;
+    const refreshTokenExpiresMs = parseInt(Config.jwtRefreshTokenExpiresIn) * 1000;
+
+    // Set httpOnly cookies
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: accessTokenExpiresMs,
+      path: '/',
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: refreshTokenExpiresMs,
+      path: '/',
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        id: admin._id,
+        fullName: admin.fullName,
+        email: admin.email,
+        role: admin.role,
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Unable to login admin",
+      error: error.message,
+    });
+  }
+};
+
+
+// 📝 Admin Register
+export const registerAdmin = async (req, res) => {
+  try {
+    const { fullName, email, phoneNumber, password, role } = req.body;
+
+    if (!fullName || !email || !phoneNumber || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be provided",
+      });
+    }
+
+    const existingEmail = await Admin.findOne({ email });
+    if (existingEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    const existingPhone = await Admin.findOne({ phoneNumber });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number already exists",
+      });
+    }
+
     const admin = await Admin.create({
       fullName,
       email,
-      password
+      phoneNumber,
+      password,
+      role,
     });
 
-    // Generate token
-    const token = generateToken(admin._id);
-
-    // Set HTTP-Only Cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000, // 1 day expiry
+    return res.status(201).json({
+      success: true,
+      message: "Admin registered successfully",
+      data: {
+        id: admin._id,
+        fullName: admin.fullName,
+        email: admin.email,
+        phoneNumber: admin.phoneNumber,
+        role: admin.role,
+      },
     });
-
-    // Return admin data (without sensitive info)
-    res.status(201).json({
-      _id: admin._id,
-      email: admin.email,
-      fullName: admin.fullName,
-    });
-
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Unable to register admin",
+      error: error.message,
+    });
   }
 };
 
-// Login Admin
-export const adminLogin = async (req, res) => {
-  const { email, password } = req.body;
 
-  console.log('Login attempt for:', email); // Debug log
-
-  // Basic validation
-  if (!email || !password) {
-    console.log('Missing credentials');
-    return res.status(400).json({ 
-      error: "Please provide both email and password",
-      details: { received: { email: !!email, password: !!password } }
-    });
-  }
-
+// 🔄 Change Password
+export const changeAdminPassword = async (req, res) => {
   try {
-    // 1. Find admin
-    console.log('Searching for admin in database...');
-    const admin = await Admin.findOne({ email }).select('+password');
-    
-    if (!admin) {
-      console.log('Admin not found in database');
-      return res.status(401).json({ 
-        error: "Invalid credentials",
-        details: "No admin found with this email"
+    const adminId = req.user?.id;
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Old and new password must be provided",
       });
     }
-    console.log('Admin found:', admin._id);
 
-    // 2. Compare passwords
-    console.log('Comparing passwords...');
-    const isMatch = await bcrypt.compare(password, admin.password);
-    
+    const admin = await Admin.findById(adminId).select("+password");
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    const isMatch = await admin.comparePassword(oldPassword);
     if (!isMatch) {
-      console.log('Password comparison failed');
-      return res.status(401).json({ 
-        error: "Invalid credentials",
-        details: "Password does not match"
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect",
       });
     }
-    console.log('Password matched');
 
-    // 3. Update last login
-    admin.lastLogin = new Date();
+    admin.password = newPassword;
     await admin.save();
-    console.log('Last login updated:', admin.lastLogin);
 
-    // 4. Generate token
-    const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET, {
-      expiresIn: '1d'
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
     });
-    console.log('Token generated');
-
-    // 5. Set cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000,
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Unable to change password",
+      error: error.message,
     });
-    console.log('Cookie set');
+  }
+};
 
-    // 6. Send response
-    res.status(200).json({
-      _id: admin._id,
+
+// 👤 Get Current Admin
+export const getCurrentAdmin = async (req, res) => {
+  try {
+    const adminId = req.user?.id;
+    const admin = await Admin.findById(adminId).select("-password");
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin retrieved successfully",
+      data: admin,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Unable to fetch admin",
+      error: error.message,
+    });
+  }
+};
+
+
+// 🔑 Generate Tokens
+const generateTokens = (admin) => {
+  const accessToken = jwt.sign(
+    {
+      id: admin._id,
       email: admin.email,
-      fullName: admin.fullName,
-      lastLogin: admin.lastLogin,
-    });
+      role: admin.role,
+    },
+    Config.jwtSecret,
+    { expiresIn: Config.jwtAccessTokenExpiresIn }
+  );
 
-  } catch (error) {
-    console.error('Login error stack:', error.stack);
-    res.status(500).json({ 
-      error: "Authentication failed",
-      details: error.message,
-      systemError: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-};
+  const refreshToken = jwt.sign(
+    {
+      id: admin._id,
+    },
+    Config.jwtRefreshSecret,
+    { expiresIn: Config.jwtRefreshTokenExpiresIn }
+  );
 
-// Logout Admin (Clear Cookie)
-export const adminLogout = (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-  });
-  res.status(200).json({ message: "Logged out successfully" });
-};
-
-// Get Admin Profile
-export const getAdminProfile = async (req, res) => {
-  try {
-    const admin = await Admin.findById(req.adminId).select('-password');
-    if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-    res.status(200).json(admin);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch admin profile" });
-  }
-};
-
-// Update Admin Profile
-export const updateAdminProfile = async (req, res) => {
-  try {
-    const admin = await Admin.findById(req.adminId);
-    if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-
-    // Update fields if they exist in the request
-    if (req.body.fullName) admin.fullName = req.body.fullName;
-    if (req.body.email) admin.email = req.body.email;
-    if (req.body.password) {
-      const salt = await bcrypt.genSalt(10);
-      admin.password = await bcrypt.hash(req.body.password, salt);
-    }
-
-    const updatedAdmin = await admin.save();
-
-    res.status(200).json({
-      _id: updatedAdmin._id,
-      email: updatedAdmin.email,
-      fullName: updatedAdmin.fullName,
-      lastLogin: updatedAdmin.lastLogin,
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update admin profile" });
-  }
-};
-
-// Delete Admin Account
-export const deleteAdminAccount = async (req, res) => {
-  try {
-    const admin = await Admin.findByIdAndDelete(req.adminId);
-    if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-
-    // Clear the cookie
-    res.clearCookie('token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-    });
-
-    res.status(200).json({ message: "Admin account deleted successfully" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete admin account" });
-  }
+  return { accessToken, refreshToken };
 };

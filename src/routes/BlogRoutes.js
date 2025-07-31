@@ -8,7 +8,7 @@ import {
 } from '../controllers/BlogController.js';
 import { fieldsUpload } from '../middleware/multer.js';
 
-import { protect } from '../middleware/AuthMiddleware.js';
+
 const router = express.Router();
 
 // Get all blog posts
@@ -19,7 +19,7 @@ router.get('/:slug', getBlogBySlug);
 
 // Create a new blog post (Admin only)
 router.post(
-  '/',protect,
+  '/',
   fieldsUpload([
     { name: 'imageUrl', maxCount: 1 },
     { name: 'authorImageUrl', maxCount: 1 }
@@ -29,7 +29,7 @@ router.post(
 
 // Update a blog post by ID (Admin only)
 router.put(
-  '/:id',protect,
+  '/:id',
   fieldsUpload([
     { name: 'imageUrl', maxCount: 1 },
     { name: 'authorImageUrl', maxCount: 1 }
@@ -38,6 +38,6 @@ router.put(
 );
 
 // Delete a blog post by ID (Admin only)
-router.delete('/:id',protect, deleteBlog);
+router.delete('/:id', deleteBlog);
 
 export default router;
