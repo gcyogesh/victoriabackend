@@ -23,8 +23,9 @@ export const loginAdmin = async (req, res) => {
     }
 
     const { accessToken, refreshToken } = generateTokens(admin);
-    admin.lastLogin = Date.now();
-    await admin.save();
+
+    // Update lastLogin with direct update query (no full document validation)
+    await Admin.findByIdAndUpdate(admin._id, { lastLogin: Date.now() });
 
     const accessTokenExpiresMs = parseInt(Config.jwtAccessTokenExpiresIn) * 1000;
     const refreshTokenExpiresMs = parseInt(Config.jwtRefreshTokenExpiresIn) * 1000;
@@ -67,139 +68,7 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-
-// 📝 Admin Register
-export const registerAdmin = async (req, res) => {
-  try {
-    const { fullName, email, phoneNumber, password, role } = req.body;
-
-    if (!fullName || !email || !phoneNumber || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "All required fields must be provided",
-      });
-    }
-
-    const existingEmail = await Admin.findOne({ email });
-    if (existingEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists",
-      });
-    }
-
-    const existingPhone = await Admin.findOne({ phoneNumber });
-    if (existingPhone) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number already exists",
-      });
-    }
-
-    const admin = await Admin.create({
-      fullName,
-      email,
-      phoneNumber,
-      password,
-      role,
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Admin registered successfully",
-      data: {
-        id: admin._id,
-        fullName: admin.fullName,
-        email: admin.email,
-        phoneNumber: admin.phoneNumber,
-        role: admin.role,
-      },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Unable to register admin",
-      error: error.message,
-    });
-  }
-};
-
-
-// 🔄 Change Password
-export const changeAdminPassword = async (req, res) => {
-  try {
-    const adminId = req.user?.id;
-    const { oldPassword, newPassword } = req.body;
-
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Old and new password must be provided",
-      });
-    }
-
-    const admin = await Admin.findById(adminId).select("+password");
-    if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found",
-      });
-    }
-
-    const isMatch = await admin.comparePassword(oldPassword);
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: "Old password is incorrect",
-      });
-    }
-
-    admin.password = newPassword;
-    await admin.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Password changed successfully",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Unable to change password",
-      error: error.message,
-    });
-  }
-};
-
-
-// 👤 Get Current Admin
-export const getCurrentAdmin = async (req, res) => {
-  try {
-    const adminId = req.user?.id;
-    const admin = await Admin.findById(adminId).select("-password");
-
-    if (!admin) {
-      return res.status(404).json({
-        success: false,
-        message: "Admin not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Admin retrieved successfully",
-      data: admin,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Unable to fetch admin",
-      error: error.message,
-    });
-  }
-};
-
-
-// 🔑 Generate Tokens
+// 🔑 Generate Tokens (keep as is)
 const generateTokens = (admin) => {
   const accessToken = jwt.sign(
     {
