@@ -56,11 +56,11 @@ export const createBlog = async (req, res) => {
   console.log('Request files:', req.files);
   
   try {
-    const { title, description, author } = req.body;
+    const { title, description } = req.body;
 
-    if (!title || !description || !author) {
+    if (!title || !description) {
       console.log('Validation failed - missing required fields');
-      return validationErrorResponse(res, 'Title, description, and author are required');
+      return validationErrorResponse(res, 'Title and description are required');
     }
 
     if (!req.files || !req.files['imageUrl']) {
@@ -78,21 +78,12 @@ export const createBlog = async (req, res) => {
     console.log('Uploading blog image to Cloudinary...');
     const imageUrl = await uploadToCloudinary(req.files['imageUrl'][0].path, 'blog-images');
     console.log('Blog image uploaded:', imageUrl);
-    
-    let authorImageUrl = null;
-    if (req.files['authorImageUrl']) {
-      console.log('Uploading author image to Cloudinary...');
-      authorImageUrl = await uploadToCloudinary(req.files['authorImageUrl'][0].path, 'author-images');
-      console.log('Author image uploaded:', authorImageUrl);
-    }
 
     const newBlog = new BlogModel({
       title,
       description,
-      author,
       slug,
-      imageUrl: imageUrl.url,
-      authorImageUrl: authorImageUrl?.url || null
+      imageUrl: imageUrl.url
     });
 
     console.log('Saving blog to database...');
@@ -152,15 +143,13 @@ export const updateBlog = async (req, res) => {
   console.log('Request files:', req.files);
   
   try {
-    const { title, description, author } = req.body;
+    const { title, description } = req.body;
     const updates = {
       ...(title && { title }),
-      ...(description && { description }),
-      ...(author && { author })
+      ...(description && { description })
     };
 
-    if (req.files) {
-      if (req.files['imageUrl']) {
+          if (req.files && req.files['imageUrl']) {
         console.log('Uploading new blog image to Cloudinary...');
         const imageResult = await uploadToCloudinary(req.files['imageUrl'][0].path, 'blog-images');
         updates.imageUrl = imageResult.url;
@@ -178,26 +167,6 @@ export const updateBlog = async (req, res) => {
           }
         }
       }
-      
-      if (req.files['authorImageUrl']) {
-        console.log('Uploading new author image to Cloudinary...');
-        const authorImageResult = await uploadToCloudinary(req.files['authorImageUrl'][0].path, 'author-images');
-        updates.authorImageUrl = authorImageResult.url;
-        console.log('New author image uploaded:', authorImageResult.url);
-        
-        // Get old author image public ID to delete later
-        const blog = await BlogModel.findById(req.params.id);
-        if (blog?.authorImageUrl) {
-          try {
-            const publicId = getPublicIdFromUrl(blog.authorImageUrl);
-            console.log('Deleting old author image from Cloudinary...');
-            await deleteFromCloudinary(publicId);
-          } catch (deleteError) {
-            console.error('Error deleting old author image:', deleteError);
-          }
-        }
-      }
-    }
 
     if (title) {
       updates.slug = slugify(title, { lower: true, strict: true });

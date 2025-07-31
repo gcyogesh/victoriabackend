@@ -7,8 +7,6 @@ const blogSchema = new mongoose.Schema(
     imageUrl: { type: String, required: true },
     description: { type: String, required: true, trim: true },
     postedAt: { type: Date, default: Date.now },
-    author: { type: String, required: true, trim: true },
-    authorImageUrl: { type: String, required: false },
     slug: { type: String, required: true, unique: true, trim: true },
   },
   {
