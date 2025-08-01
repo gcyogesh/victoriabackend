@@ -29,43 +29,8 @@ const API = process.env.API || 'api/v1';
 app.use(cookieParser());
 app.use(express.json());
 
-const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'http://localhost:4173',
-  'http://184.168.125.236',
-  'http://184.168.125.236:3000',
-  'http://184.168.125.236:3005',
-  'http://184.168.125.236:3001',
-  'http://184.168.125.236:5173',
-  'http://184.168.125.236:4173',
-  'https://www.victoriaclean.com.au',
-  'https://victoriaclean.com.au',
-  'http://www.victoriaclean.com.au',
-  'http://victoriaclean.com.au'
-];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      // For development, allow all localhost and IP-based origins
-      if (origin.startsWith('http://localhost:') || 
-          origin.startsWith('http://127.0.0.1:') ||
-          origin.match(/^http:\/\/\d+\.\d+\.\d+\.\d+:\d+/)) {
-        callback(null, true);
-      } else {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
-    }
-  },
+  origin: true, // Allow all origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
