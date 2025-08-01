@@ -21,8 +21,7 @@ router.get('/:slug', getBlogBySlug);
 router.post(
   '/',
   fieldsUpload([
-    { name: 'imageUrl', maxCount: 1 },
-    { name: 'authorImageUrl', maxCount: 1 }
+    { name: 'imageUrl', maxCount: 1 }
   ]),
   createBlog
 );
@@ -31,8 +30,7 @@ router.post(
 router.put(
   '/:id',
   fieldsUpload([
-    { name: 'imageUrl', maxCount: 1 },
-    { name: 'authorImageUrl', maxCount: 1 }
+    { name: 'imageUrl', maxCount: 1 }
   ]),
   updateBlog
 );

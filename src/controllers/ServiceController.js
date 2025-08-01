@@ -18,10 +18,10 @@ export const createService = async (req, res) => {
       if (err) return handleError(res, err, 400);
 
       try {
-        const { title, description, category } = req.body;
+        const { title, description } = req.body;
 
-        if (!title || !description || !category) {
-          return handleError(res, new Error("All fields are required"), 400);
+        if (!title || !description) {
+          return handleError(res, new Error("Title and description are required"), 400);
         }
 
         const imageUrl = req.file
@@ -32,7 +32,6 @@ export const createService = async (req, res) => {
           title,
           description,
           imageUrl,
-          category,
         });
 
         await service.save();
@@ -53,10 +52,9 @@ export const createService = async (req, res) => {
 // Get all services
 export const getAllServices = async (req, res) => {
   try {
-    const { category, featured } = req.query;
+    const { featured } = req.query;
     const filter = {};
 
-    if (category) filter.category = category;
     if (featured) filter.isFeatured = featured === "true";
 
     const services = await Service.find(filter).sort({ createdAt: -1 });

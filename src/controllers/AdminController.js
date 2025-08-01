@@ -23,8 +23,9 @@ export const loginAdmin = async (req, res) => {
     }
 
     const { accessToken, refreshToken } = generateTokens(admin);
-    admin.lastLogin = Date.now();
-    await admin.save();
+
+    // Update lastLogin with direct update query (no full document validation)
+    await Admin.findByIdAndUpdate(admin._id, { lastLogin: Date.now() });
 
     const accessTokenExpiresMs = parseInt(Config.jwtAccessTokenExpiresIn) * 1000;
     const refreshTokenExpiresMs = parseInt(Config.jwtRefreshTokenExpiresIn) * 1000;
@@ -32,7 +33,7 @@ export const loginAdmin = async (req, res) => {
     // Set httpOnly cookies
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Allow HTTP in production
       sameSite: 'lax',
       maxAge: accessTokenExpiresMs,
       path: '/',
@@ -40,7 +41,7 @@ export const loginAdmin = async (req, res) => {
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Allow HTTP in production
       sameSite: 'lax',
       maxAge: refreshTokenExpiresMs,
       path: '/',
@@ -67,42 +68,36 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
-
-// 📝 Admin Register
+// 📝 Admin Registration
 export const registerAdmin = async (req, res) => {
   try {
-    const { fullName, email, phoneNumber, password, role } = req.body;
+    const { fullName, email, password, role = 'admin' } = req.body;
 
-    if (!fullName || !email || !phoneNumber || !password) {
+    if (!fullName || !email || !password) {
       return res.status(400).json({
         success: false,
-        message: "All required fields must be provided",
+        message: "Full name, email, and password are required",
       });
     }
 
-    const existingEmail = await Admin.findOne({ email });
-    if (existingEmail) {
+    // Check if admin already exists
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
       return res.status(400).json({
         success: false,
-        message: "Email already exists",
+        message: "Admin with this email already exists",
       });
     }
 
-    const existingPhone = await Admin.findOne({ phoneNumber });
-    if (existingPhone) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number already exists",
-      });
-    }
-
-    const admin = await Admin.create({
+    // Create new admin
+    const admin = new Admin({
       fullName,
       email,
-      phoneNumber,
       password,
       role,
     });
+
+    await admin.save();
 
     return res.status(201).json({
       success: true,
@@ -111,7 +106,6 @@ export const registerAdmin = async (req, res) => {
         id: admin._id,
         fullName: admin.fullName,
         email: admin.email,
-        phoneNumber: admin.phoneNumber,
         role: admin.role,
       },
     });
@@ -124,17 +118,23 @@ export const registerAdmin = async (req, res) => {
   }
 };
 
-
-// 🔄 Change Password
+// 🔑 Change Admin Password
 export const changeAdminPassword = async (req, res) => {
   try {
-    const adminId = req.user?.id;
-    const { oldPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    const adminId = req.user?.id; // From auth middleware
 
-    if (!oldPassword || !newPassword) {
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: "Old and new password must be provided",
+        message: "Current password and new password are required",
       });
     }
 
@@ -146,14 +146,15 @@ export const changeAdminPassword = async (req, res) => {
       });
     }
 
-    const isMatch = await admin.comparePassword(oldPassword);
-    if (!isMatch) {
+    // Verify current password
+    if (!(await admin.comparePassword(currentPassword))) {
       return res.status(400).json({
         success: false,
-        message: "Old password is incorrect",
+        message: "Current password is incorrect",
       });
     }
 
+    // Update password
     admin.password = newPassword;
     await admin.save();
 
@@ -170,13 +171,19 @@ export const changeAdminPassword = async (req, res) => {
   }
 };
 
-
 // 👤 Get Current Admin
 export const getCurrentAdmin = async (req, res) => {
   try {
-    const adminId = req.user?.id;
-    const admin = await Admin.findById(adminId).select("-password");
+    const adminId = req.user?.id; // From auth middleware
 
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const admin = await Admin.findById(adminId).select("-password");
     if (!admin) {
       return res.status(404).json({
         success: false,
@@ -186,20 +193,19 @@ export const getCurrentAdmin = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Admin retrieved successfully",
+      message: "Admin details retrieved successfully",
       data: admin,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: "Unable to fetch admin",
+      message: "Unable to get admin details",
       error: error.message,
     });
   }
 };
 
-
-// 🔑 Generate Tokens
+// 🔑 Generate Tokens (keep as is)
 const generateTokens = (admin) => {
   const accessToken = jwt.sign(
     {
