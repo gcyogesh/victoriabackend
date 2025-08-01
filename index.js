@@ -29,7 +29,7 @@ const API = process.env.API || 'api/v1';
 app.use(cookieParser());
 app.use(express.json());
 
-const allowedOrigins = ['http://localhost:3000'];
+const allowedOrigins = ['http://localhost:3000', 'https://www.victoriaclean.com.au'];
 
 app.use(cors({
   origin: function (origin, callback) {
