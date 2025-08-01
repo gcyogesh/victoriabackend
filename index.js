@@ -29,18 +29,51 @@ const API = process.env.API || 'api/v1';
 app.use(cookieParser());
 app.use(express.json());
 
-const allowedOrigins = ['http://localhost:3000'];
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://184.168.125.236',
+  'http://184.168.125.236:3000',
+  'http://184.168.125.236:3005',
+  'http://184.168.125.236:3001',
+  'http://184.168.125.236:5173',
+  'http://184.168.125.236:4173',
+  'https://www.victoriaclean.com.au',
+  'https://victoriaclean.com.au',
+  'http://www.victoriaclean.com.au',
+  'http://victoriaclean.com.au'
+];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // For development, allow all localhost and IP-based origins
+      if (origin.startsWith('http://localhost:') || 
+          origin.startsWith('http://127.0.0.1:') ||
+          origin.match(/^http:\/\/\d+\.\d+\.\d+\.\d+:\d+/)) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -54,8 +87,9 @@ app.use((err, req, res, next) => {
 // Connect to Database and start server
 Connection()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT}`);
+      console.log(`Server accessible at http://184.168.125.236:${PORT}`);
     });
   })
   .catch(err => {
@@ -72,7 +106,7 @@ app.use(`/${API}/team`, TeamMemberRoutes);
 app.use(`/${API}/company`, CompanyRoutes);
 app.use(`/${API}/gallery`, GalleryRoutes);
 app.use(`/${API}/testimonial`, TestimonialRoutes);
-app.use(`/${API}/founders`,FounderRoutes);
+app.use(`/${API}/founders`, FounderRoutes);
 app.use(`/${API}/contactinfo`, ContactInfoRoute);
 
 

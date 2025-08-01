@@ -33,7 +33,7 @@ export const loginAdmin = async (req, res) => {
     // Set httpOnly cookies
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Allow HTTP in production
       sameSite: 'lax',
       maxAge: accessTokenExpiresMs,
       path: '/',
@@ -41,7 +41,7 @@ export const loginAdmin = async (req, res) => {
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false, // Allow HTTP in production
       sameSite: 'lax',
       maxAge: refreshTokenExpiresMs,
       path: '/',
