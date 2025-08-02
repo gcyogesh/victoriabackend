@@ -1,21 +1,30 @@
+// routes/testimonialRoutes.js
 import express from 'express';
 import {
   getAllTestimonials,
   createTestimonial,
   updateTestimonial,
-  deleteTestimonial
-} from '../controllers/TestimonialController.js'
+  deleteTestimonial,
+  getTestimonialById,
+  getTestimonialsByStars,
+  searchTestimonials,
+  getTestimonialsCount
+} from '../controllers/TestimonialController.js';
 // import { protect } from '../middleware/auth.js';
 import { singleUpload } from '../middleware/multer.js';
 
 const router = express.Router();
 
 // Public routes
-router.get('/', getAllTestimonials);
+router.get('/', getAllTestimonials);                              // Get all testimonials
+router.get('/count', getTestimonialsCount);                       // Get testimonials count
+router.get('/stars/:rating', getTestimonialsByStars);             // Get by star rating
+router.get('/search/:query', searchTestimonials);                 // Search testimonials
+router.get('/:id', getTestimonialById);                           // Get single testimonial
 
 // Protected routes (Admin only)
-router.post('/', singleUpload('imageUrl'), createTestimonial);
-router.put('/:id', singleUpload('imageUrl'), updateTestimonial);
-router.delete('/:id', deleteTestimonial);
+router.post('/', singleUpload('imageUrl'), createTestimonial);    // Create testimonial
+router.put('/:id', singleUpload('imageUrl'), updateTestimonial);  // Update testimonial
+router.delete('/:id', deleteTestimonial);                         // Delete testimonial
 
 export default router;

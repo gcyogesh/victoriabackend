@@ -10,7 +10,6 @@ import BlogRoutes from "./src/routes/BlogRoutes.js";
 import ServiceRoutes from "./src/routes/ServiceRoutes.js";
 import SubServiceRoutes from "./src/routes/SubServiceRoutes.js";
 import TeamMemberRoutes from './src/routes/TeamMemberRoutes.js';
-import CompanyRoutes from './src/routes/CompanyRoutes.js'
 import GalleryRoutes from "./src/routes/GalleryRoutes.js"
 import TestimonialRoutes from "./src/routes/TestimonialRoutes.js"
 import FounderRoutes from './src/routes/FounderRoutes.js';
@@ -69,7 +68,7 @@ app.use(`/${API}/blogs`, BlogRoutes);
 app.use(`/${API}/services`, ServiceRoutes);
 app.use(`/${API}/subservices`, SubServiceRoutes);
 app.use(`/${API}/team`, TeamMemberRoutes);
-app.use(`/${API}/company`, CompanyRoutes);
+// app.use(`/${API}/company`, CompanyRoutes);
 app.use(`/${API}/gallery`, GalleryRoutes);
 app.use(`/${API}/testimonial`, TestimonialRoutes);
 app.use(`/${API}/founders`,FounderRoutes);

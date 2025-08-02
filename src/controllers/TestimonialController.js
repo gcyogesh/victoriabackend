@@ -1,23 +1,27 @@
+// controllers/TestimonialController.js
 import ClientReviewModel from '../models/TestimonialModel.js';
-import { uploadToCloudinary, deleteFromCloudinary } from '../middleware/multer.js';
+import { singleUpload, getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
+import { 
+  successResponse, 
+  errorResponse, 
+  notFoundResponse, 
+  validationErrorResponse 
+} from '../utils/responseUtils.js';
 
 // @desc    Get all testimonials
 // @route   GET /api/testimonials
 // @access  Public
 export const getAllTestimonials = async (req, res) => {
+  console.log('=== GET ALL TESTIMONIALS REQUEST ===');
+  
   try {
     const testimonials = await ClientReviewModel.find().sort({ createdAt: -1 });
-    res.status(200).json({
-      success: true,
-      count: testimonials.length,
-      data: testimonials
-    });
+    console.log(`Found ${testimonials.length} testimonials`);
+    
+    return successResponse(res, testimonials);
   } catch (error) {
     console.error('Error fetching testimonials:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while fetching testimonials'
-    });
+    return errorResponse(res, "Failed to fetch testimonials", 500, error);
   }
 };
 
@@ -25,64 +29,81 @@ export const getAllTestimonials = async (req, res) => {
 // @route   POST /api/testimonials
 // @access  Private (Admin)
 export const createTestimonial = async (req, res) => {
+  console.log('=== CREATE TESTIMONIAL REQUEST ===');
+  console.log('Request body:', req.body);
+  console.log('Request file:', req.file ? {
+    originalname: req.file.originalname,
+    size: req.file.size,
+    mimetype: req.file.mimetype,
+    filename: req.file.filename
+  } : 'No file uploaded');
+
   try {
     const { name, stars, description } = req.body;
     
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Image is required'
-      });
-    }
-
     // Validate required fields
     if (!name || !stars || !description) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide all required fields: name, stars, description'
+      // Clean up uploaded file if validation fails
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
+      
+      return validationErrorResponse(res, {
+        name: !name ? 'Name is required' : undefined,
+        stars: !stars ? 'Stars rating is required' : undefined,
+        description: !description ? 'Description is required' : undefined
       });
     }
 
-    // Upload image to Cloudinary
-    const cloudinaryResult = await uploadToCloudinary(req.file.path, 'testimonials');
+    if (!req.file) {
+      return validationErrorResponse(res, {
+        image: 'Testimonial image is required'
+      });
+    }
 
-    const newTestimonial = await ClientReviewModel.create({
-      imageUrl: cloudinaryResult.url,
+    // Get file URL for local storage
+    const imageUrl = getFileUrl(req.file.filename);
+    
+    console.log('File uploaded successfully:', {
+      originalname: req.file.originalname,
+      filename: req.file.filename,
+      path: req.file.path,
+      url: imageUrl
+    });
+
+    const testimonial = new ClientReviewModel({
+      imageUrl,
       name,
       stars,
       description
     });
 
-    res.status(201).json({
-      success: true,
-      data: newTestimonial
-    });
+    console.log('Saving testimonial to database...');
+    const createdTestimonial = await testimonial.save();
+    console.log('Testimonial created successfully:', createdTestimonial);
+
+    return successResponse(res, createdTestimonial, 201);
   } catch (error) {
-    console.error('Error creating testimonial:', error);
+    console.error('Error creating testimonial:', {
+      message: error.message,
+      stack: error.stack,
+      fullError: error
+    });
     
-    // Delete uploaded file if testimonial creation failed
+    // Clean up uploaded file if error occurs
     if (req.file) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (unlinkError) {
-        console.error('Error deleting temporary file:', unlinkError);
-      }
+      await deleteLocalFile(req.file.filename);
     }
 
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: messages
+      return validationErrorResponse(res, {
+        validation: messages
       });
     }
 
-    res.status(500).json({
-      success: false,
-      message: 'Server error while creating testimonial'
-    });
+    return errorResponse(res, "Failed to create testimonial", 500, error);
   }
 };
 
@@ -90,77 +111,110 @@ export const createTestimonial = async (req, res) => {
 // @route   PUT /api/testimonials/:id
 // @access  Private (Admin)
 export const updateTestimonial = async (req, res) => {
+  console.log('=== UPDATE TESTIMONIAL REQUEST ===');
+  console.log('Request params:', req.params);
+  console.log('Request body:', req.body);
+  console.log('Request file:', req.file ? {
+    originalname: req.file.originalname,
+    size: req.file.size,
+    mimetype: req.file.mimetype,
+    filename: req.file.filename
+  } : 'No file uploaded');
+
   try {
     const { id } = req.params;
     const { name, stars, description } = req.body;
     
-    // Find the existing testimonial
-    const existingTestimonial = await ClientReviewModel.findById(id);
-    if (!existingTestimonial) {
-      return res.status(404).json({
-        success: false,
-        message: 'Testimonial not found'
+    const testimonial = await ClientReviewModel.findById(id);
+    
+    if (!testimonial) {
+      // Clean up uploaded file if testimonial not found
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
+      return notFoundResponse(res, "Testimonial");
+    }
+
+    // Validate at least one field is being updated
+    if (!name && !stars && !description && !req.file) {
+      return validationErrorResponse(res, {
+        update: 'At least one field (name, stars, description, or image) must be provided for update'
       });
     }
 
-    let imageUrl = existingTestimonial.imageUrl;
+    let imageUrl = testimonial.imageUrl;
     
-    // If new image was uploaded
+    // If new image is uploaded
     if (req.file) {
-      // Upload new image to Cloudinary
-      const cloudinaryResult = await uploadToCloudinary(req.file.path, 'testimonials');
-      
-      // Delete old image from Cloudinary
       try {
-        await deleteFromCloudinary(getPublicIdFromUrl(existingTestimonial.imageUrl));
-      } catch (deleteError) {
-        console.error('Error deleting old image from Cloudinary:', deleteError);
+        console.log('Processing new image upload...');
+        
+        // Delete old image file if it exists
+        if (testimonial.imageUrl) {
+          const oldFilename = getFilenameFromPath(testimonial.imageUrl);
+          if (oldFilename) {
+            console.log('Deleting old image:', oldFilename);
+            await deleteLocalFile(oldFilename);
+          }
+        }
+        
+        // Set new image URL
+        imageUrl = getFileUrl(req.file.filename);
+        
+        console.log('New image uploaded:', {
+          originalname: req.file.originalname,
+          filename: req.file.filename,
+          url: imageUrl
+        });
+      } catch (uploadError) {
+        console.error('Image processing error:', uploadError);
+        
+        // Clean up uploaded file if error occurs
+        if (req.file) {
+          await deleteLocalFile(req.file.filename);
+        }
+        
+        return errorResponse(res, "Failed to process new testimonial image", 500, uploadError);
       }
-      
-      imageUrl = cloudinaryResult.url;
     }
 
-    const updatedTestimonial = await ClientReviewModel.findByIdAndUpdate(
-      id,
-      {
-        imageUrl,
-        name: name || existingTestimonial.name,
-        stars: stars || existingTestimonial.stars,
-        description: description || existingTestimonial.description
-      },
-      { new: true, runValidators: true }
-    );
+    // Update fields if they are provided
+    if (name) {
+      testimonial.name = name;
+      console.log('Name updated to:', name);
+    }
+    if (stars) {
+      testimonial.stars = stars;
+      console.log('Stars updated to:', stars);
+    }
+    if (description) {
+      testimonial.description = description;
+      console.log('Description updated to:', description);
+    }
+    testimonial.imageUrl = imageUrl;
 
-    res.status(200).json({
-      success: true,
-      data: updatedTestimonial
-    });
+    console.log('Saving updated testimonial...');
+    const updatedTestimonial = await testimonial.save();
+    console.log('Testimonial updated successfully:', updatedTestimonial);
+
+    return successResponse(res, updatedTestimonial);
   } catch (error) {
     console.error('Error updating testimonial:', error);
     
-    // Delete uploaded file if update failed
+    // Clean up uploaded file if error occurs
     if (req.file) {
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (unlinkError) {
-        console.error('Error deleting temporary file:', unlinkError);
-      }
+      await deleteLocalFile(req.file.filename);
     }
 
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(val => val.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: messages
+      return validationErrorResponse(res, {
+        validation: messages
       });
     }
 
-    res.status(500).json({
-      success: false,
-      message: 'Server error while updating testimonial'
-    });
+    return errorResponse(res, "Failed to update testimonial", 500, error);
   }
 };
 
@@ -168,36 +222,131 @@ export const updateTestimonial = async (req, res) => {
 // @route   DELETE /api/testimonials/:id
 // @access  Private (Admin)
 export const deleteTestimonial = async (req, res) => {
+  console.log('=== DELETE TESTIMONIAL REQUEST ===');
+  console.log('Testimonial ID:', req.params.id);
+  
   try {
     const { id } = req.params;
     
     const testimonial = await ClientReviewModel.findById(id);
+    
     if (!testimonial) {
-      return res.status(404).json({
-        success: false,
-        message: 'Testimonial not found'
-      });
+      console.log('Testimonial not found');
+      return notFoundResponse(res, "Testimonial");
     }
 
-    // Delete image from Cloudinary
-    try {
-      await deleteFromCloudinary(getPublicIdFromUrl(testimonial.imageUrl));
-    } catch (deleteError) {
-      console.error('Error deleting image from Cloudinary:', deleteError);
-      // Continue with deletion even if image deletion fails
+    // Delete associated image file
+    if (testimonial.imageUrl) {
+      const filename = getFilenameFromPath(testimonial.imageUrl);
+      if (filename) {
+        console.log('Deleting associated image:', filename);
+        await deleteLocalFile(filename);
+      }
     }
 
+    console.log('Deleting testimonial from database...');
     await testimonial.deleteOne();
+    console.log('Testimonial and associated files deleted successfully');
 
-    res.status(200).json({
-      success: true,
-      message: 'Testimonial deleted successfully'
+    return successResponse(res, { 
+      message: "Testimonial and associated files deleted successfully",
+      deletedTestimonial: testimonial
     });
   } catch (error) {
     console.error('Error deleting testimonial:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while deleting testimonial'
-    });
+    return errorResponse(res, "Failed to delete testimonial", 500, error);
+  }
+};
+
+// Additional helper functions
+
+// @desc    Get testimonials by star rating
+// @route   GET /api/testimonials/stars/:rating
+// @access  Public
+export const getTestimonialsByStars = async (req, res) => {
+  console.log('=== GET TESTIMONIALS BY STARS REQUEST ===');
+  console.log('Star rating:', req.params.rating);
+  
+  try {
+    const { rating } = req.params;
+    const stars = parseInt(rating);
+    
+    if (isNaN(stars) || stars < 1 || stars > 5) {
+      return validationErrorResponse(res, {
+        rating: 'Star rating must be between 1 and 5'
+      });
+    }
+    
+    const testimonials = await ClientReviewModel.find({ stars }).sort({ createdAt: -1 });
+    
+    console.log(`Found ${testimonials.length} testimonials with ${stars} stars`);
+    return successResponse(res, testimonials);
+  } catch (error) {
+    console.error('Error fetching testimonials by stars:', error);
+    return errorResponse(res, "Failed to fetch testimonials by star rating", 500, error);
+  }
+};
+
+// @desc    Search testimonials by name or description
+// @route   GET /api/testimonials/search/:query
+// @access  Public
+export const searchTestimonials = async (req, res) => {
+  console.log('=== SEARCH TESTIMONIALS REQUEST ===');
+  console.log('Search query:', req.params.query);
+  
+  try {
+    const { query } = req.params;
+    const testimonials = await ClientReviewModel.find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } }
+      ]
+    }).sort({ createdAt: -1 });
+    
+    console.log(`Found ${testimonials.length} testimonials matching: ${query}`);
+    return successResponse(res, testimonials);
+  } catch (error) {
+    console.error('Error searching testimonials:', error);
+    return errorResponse(res, "Failed to search testimonials", 500, error);
+  }
+};
+
+// @desc    Get testimonials count
+// @route   GET /api/testimonials/count
+// @access  Public
+export const getTestimonialsCount = async (req, res) => {
+  console.log('=== GET TESTIMONIALS COUNT REQUEST ===');
+  
+  try {
+    const count = await ClientReviewModel.countDocuments();
+    console.log(`Total testimonials: ${count}`);
+    
+    return successResponse(res, { count });
+  } catch (error) {
+    console.error('Error getting testimonials count:', error);
+    return errorResponse(res, "Failed to get testimonials count", 500, error);
+  }
+};
+
+// @desc    Get single testimonial
+// @route   GET /api/testimonials/:id
+// @access  Public
+export const getTestimonialById = async (req, res) => {
+  console.log('=== GET TESTIMONIAL REQUEST ===');
+  console.log('Testimonial ID:', req.params.id);
+  
+  try {
+    const testimonial = await ClientReviewModel.findById(req.params.id);
+    
+    if (!testimonial) {
+      console.log('Testimonial not found');
+      return notFoundResponse(res, "Testimonial");
+    }
+    
+    console.log('Testimonial found:', testimonial);
+    return successResponse(res, testimonial);
+  } catch (error) {
+    console.error('Error fetching testimonial:', error);
+    return errorResponse(res, "Failed to fetch testimonial", 500, error);
   }
 };

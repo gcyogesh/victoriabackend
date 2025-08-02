@@ -1,5 +1,6 @@
+// controllers/FounderController.js
 import Founder from '../models/FounderModel.js';
-import { uploadToCloudinary, deleteFromCloudinary, getPublicIdFromUrl } from '../middleware/multer.js';
+import { singleUpload, getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
 import {
   successResponse,
   errorResponse,
@@ -16,7 +17,12 @@ import {
 export const createFounder = async (req, res) => {
   console.log('=== CREATE FOUNDER REQUEST ===');
   console.log('Request body:', req.body);
-  console.log('Request file:', req.file);
+  console.log('Request file:', req.file ? {
+    originalname: req.file.originalname,
+    size: req.file.size,
+    mimetype: req.file.mimetype,
+    filename: req.file.filename
+  } : 'No file uploaded');
 
   try {
     const { name, position, title, description } = req.body;
@@ -24,31 +30,56 @@ export const createFounder = async (req, res) => {
     // Validate required fields
     if (!name || !position || !title || !description) {
       console.log('Validation failed - missing required fields');
-      return validationErrorResponse(res, 'All fields are required');
+      
+      // Clean up uploaded file if validation fails
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
+      
+      return validationErrorResponse(res, {
+        name: !name ? 'Name is required' : undefined,
+        position: !position ? 'Position is required' : undefined,
+        title: !title ? 'Title is required' : undefined,
+        description: !description ? 'Description is required' : undefined
+      });
     }
 
     if (!req.file) {
       console.log('Validation failed - missing image file');
-      return validationErrorResponse(res, 'Founder image is required');
+      return validationErrorResponse(res, {
+        image: 'Founder image is required'
+      });
     }
 
     // Check if founder with same name already exists
     const existingFounder = await Founder.findOne({ name });
     if (existingFounder) {
       console.log('Conflict - founder with same name exists');
-      return conflictResponse(res, 'Founder');
+      
+      // Clean up uploaded file if conflict occurs
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
+      
+      return conflictResponse(res, 'Founder with this name already exists');
     }
 
-    console.log('Uploading founder image to Cloudinary...');
-    const imageResult = await uploadToCloudinary(req.file.path, 'founder-images');
-    console.log('Founder image uploaded:', imageResult);
+    // Get file URL for local storage
+    const imageUrl = getFileUrl(req.file.filename);
+    
+    console.log('File uploaded successfully:', {
+      originalname: req.file.originalname,
+      filename: req.file.filename,
+      path: req.file.path,
+      url: imageUrl
+    });
 
     const newFounder = new Founder({
       name,
       position,
       title,
       description,
-      imageUrl: imageResult.url
+      imageUrl
     });
 
     console.log('Saving founder to database...');
@@ -57,18 +88,26 @@ export const createFounder = async (req, res) => {
 
     return successResponse(res, savedFounder, 201);
   } catch (error) {
-    console.error('Error in createFounder:', error);
-    
-    // Detailed error information
-    const errorInfo = {
+    console.error('Error in createFounder:', {
       message: error.message,
       stack: error.stack,
-      ...(error.response && { response: error.response.data }),
-      ...(error.code && { code: error.code })
-    };
+      fullError: error
+    });
     
-    console.error('Full error details:', errorInfo);
-    return errorResponse(res, 'Failed to create founder', 500, errorInfo);
+    // Clean up uploaded file if error occurs
+    if (req.file) {
+      await deleteLocalFile(req.file.filename);
+    }
+
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return validationErrorResponse(res, {
+        validation: messages
+      });
+    }
+    
+    return errorResponse(res, 'Failed to create founder', 500, error);
   }
 };
 
@@ -78,14 +117,17 @@ export const createFounder = async (req, res) => {
  * @access  Public
  */
 export const getAllFounders = async (req, res) => {
+  console.log('=== GET ALL FOUNDERS REQUEST ===');
+  
   try {
     console.log('Fetching all founders...');
     const founders = await Founder.find().sort({ createdAt: -1 });
     console.log(`Found ${founders.length} founders`);
-    successResponse(res, founders);
+    
+    return successResponse(res, founders);
   } catch (error) {
     console.error('Error in getAllFounders:', error);
-    errorResponse(res, 'Failed to fetch founders', 500, error);
+    return errorResponse(res, 'Failed to fetch founders', 500, error);
   }
 };
 
@@ -95,6 +137,9 @@ export const getAllFounders = async (req, res) => {
  * @access  Public
  */
 export const getFounderById = async (req, res) => {
+  console.log('=== GET FOUNDER BY ID REQUEST ===');
+  console.log('Founder ID:', req.params.id);
+  
   try {
     console.log(`Fetching founder with ID: ${req.params.id}`);
     const founder = await Founder.findById(req.params.id);
@@ -105,10 +150,10 @@ export const getFounderById = async (req, res) => {
     }
     
     console.log('Founder found:', founder);
-    successResponse(res, founder);
+    return successResponse(res, founder);
   } catch (error) {
     console.error('Error in getFounderById:', error);
-    errorResponse(res, 'Failed to fetch founder', 500, error);
+    return errorResponse(res, 'Failed to fetch founder', 500, error);
   }
 };
 
@@ -121,80 +166,130 @@ export const updateFounder = async (req, res) => {
   console.log('=== UPDATE FOUNDER REQUEST ===');
   console.log('Request params:', req.params);
   console.log('Request body:', req.body);
-  console.log('Request file:', req.file);
+  console.log('Request file:', req.file ? {
+    originalname: req.file.originalname,
+    size: req.file.size,
+    mimetype: req.file.mimetype,
+    filename: req.file.filename
+  } : 'No file uploaded');
 
   try {
+    const { id } = req.params;
     const { name, position, title, description } = req.body;
-    const updates = {
-      ...(name && { name }),
-      ...(position && { position }),
-      ...(title && { title }),
-      ...(description && { description })
-    };
+    
+    const founder = await Founder.findById(id);
+    
+    if (!founder) {
+      // Clean up uploaded file if founder not found
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
+      return notFoundResponse(res, 'Founder');
+    }
+
+    // Validate at least one field is being updated
+    if (!name && !position && !title && !description && !req.file) {
+      return validationErrorResponse(res, {
+        update: 'At least one field must be provided for update'
+      });
+    }
 
     // Check if name was changed and if it conflicts with another founder
-    if (name) {
+    if (name && name !== founder.name) {
       const existingFounder = await Founder.findOne({
         name,
-        _id: { $ne: req.params.id }
+        _id: { $ne: id }
       });
       
       if (existingFounder) {
         console.log('Conflict - another founder with this name exists');
+        
+        // Clean up uploaded file if conflict occurs
+        if (req.file) {
+          await deleteLocalFile(req.file.filename);
+        }
+        
         return conflictResponse(res, 'Founder with this name already exists');
       }
     }
 
+    let imageUrl = founder.imageUrl;
+    
     // Handle image update if new file was uploaded
     if (req.file) {
-      console.log('Uploading new founder image to Cloudinary...');
-      const imageResult = await uploadToCloudinary(req.file.path, 'founder-images');
-      updates.imageUrl = imageResult.url;
-      console.log('New founder image uploaded:', imageResult.url);
-      
-      // Get old image public ID to delete later
-      const founder = await Founder.findById(req.params.id);
-      if (founder?.imageUrl) {
-        try {
-          const publicId = getPublicIdFromUrl(founder.imageUrl);
-          console.log('Deleting old founder image from Cloudinary...');
-          await deleteFromCloudinary(publicId);
-        } catch (deleteError) {
-          console.error('Error deleting old founder image:', deleteError);
+      try {
+        console.log('Processing new image upload...');
+        
+        // Delete old image file if it exists
+        if (founder.imageUrl) {
+          const oldFilename = getFilenameFromPath(founder.imageUrl);
+          if (oldFilename) {
+            console.log('Deleting old image:', oldFilename);
+            await deleteLocalFile(oldFilename);
+          }
         }
+        
+        // Set new image URL
+        imageUrl = getFileUrl(req.file.filename);
+        
+        console.log('New image uploaded:', {
+          originalname: req.file.originalname,
+          filename: req.file.filename,
+          url: imageUrl
+        });
+      } catch (uploadError) {
+        console.error('Image processing error:', uploadError);
+        
+        // Clean up uploaded file if error occurs
+        if (req.file) {
+          await deleteLocalFile(req.file.filename);
+        }
+        
+        return errorResponse(res, 'Failed to process new founder image', 500, uploadError);
       }
     }
 
-    console.log('Updating founder in database...');
-    const updatedFounder = await Founder.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { 
-        new: true, 
-        runValidators: true
-      }
-    );
-
-    if (!updatedFounder) {
-      console.log('Founder not found for update');
-      return notFoundResponse(res, 'Founder');
+    // Update fields if they are provided
+    if (name) {
+      founder.name = name;
+      console.log('Name updated to:', name);
     }
+    if (position) {
+      founder.position = position;
+      console.log('Position updated to:', position);
+    }
+    if (title) {
+      founder.title = title;
+      console.log('Title updated to:', title);
+    }
+    if (description) {
+      founder.description = description;
+      console.log('Description updated to:', description);
+    }
+    founder.imageUrl = imageUrl;
 
+    console.log('Saving updated founder...');
+    const updatedFounder = await founder.save();
     console.log('Founder updated successfully:', updatedFounder);
+
     return successResponse(res, updatedFounder);
   } catch (error) {
     console.error('Error in updateFounder:', error);
     
-    const errorInfo = {
-      message: error.message,
-      stack: error.stack,
-      ...(error.name === 'ValidationError' && { validationErrors: error.errors }),
-      ...(error.response && { response: error.response.data }),
-      ...(error.code && { code: error.code })
-    };
+    // Clean up uploaded file if error occurs
+    if (req.file) {
+      await deleteLocalFile(req.file.filename);
+    }
+
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return validationErrorResponse(res, {
+        validation: messages
+      });
+    }
     
-    console.error('Full error details:', errorInfo);
-    return errorResponse(res, 'Failed to update founder', 500, errorInfo);
+    return errorResponse(res, 'Failed to update founder', 500, error);
   }
 };
 
@@ -204,6 +299,9 @@ export const updateFounder = async (req, res) => {
  * @access  Private (Admin)
  */
 export const deleteFounder = async (req, res) => {
+  console.log('=== DELETE FOUNDER REQUEST ===');
+  console.log('Founder ID:', req.params.id);
+  
   try {
     console.log(`Attempting to delete founder with ID: ${req.params.id}`);
     
@@ -213,24 +311,97 @@ export const deleteFounder = async (req, res) => {
       return notFoundResponse(res, 'Founder');
     }
 
-    // Delete image from Cloudinary if it exists
+    // Delete associated image file
     if (founder.imageUrl) {
-      try {
-        const publicId = getPublicIdFromUrl(founder.imageUrl);
-        console.log('Deleting founder image from Cloudinary...');
-        await deleteFromCloudinary(publicId);
-      } catch (deleteError) {
-        console.error('Error deleting founder image:', deleteError);
+      const filename = getFilenameFromPath(founder.imageUrl);
+      if (filename) {
+        console.log('Deleting associated image:', filename);
+        await deleteLocalFile(filename);
       }
     }
 
     console.log('Deleting founder from database...');
-    await Founder.findByIdAndDelete(req.params.id);
+    await founder.deleteOne();
+    console.log('Founder and associated files deleted successfully');
     
-    console.log('Founder deleted successfully');
-    return successResponse(res, { message: 'Founder deleted successfully' });
+    return successResponse(res, { 
+      message: 'Founder and associated files deleted successfully',
+      deletedFounder: founder
+    });
   } catch (error) {
     console.error('Error in deleteFounder:', error);
-    errorResponse(res, 'Failed to delete founder', 500, error);
+    return errorResponse(res, 'Failed to delete founder', 500, error);
+  }
+};
+
+// Additional helper functions
+
+/**
+ * @desc    Search founders by name, position, or title
+ * @route   GET /api/founders/search/:query
+ * @access  Public
+ */
+export const searchFounders = async (req, res) => {
+  console.log('=== SEARCH FOUNDERS REQUEST ===');
+  console.log('Search query:', req.params.query);
+  
+  try {
+    const { query } = req.params;
+    const founders = await Founder.find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { position: { $regex: query, $options: 'i' } },
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } }
+      ]
+    }).sort({ createdAt: -1 });
+    
+    console.log(`Found ${founders.length} founders matching: ${query}`);
+    return successResponse(res, founders);
+  } catch (error) {
+    console.error('Error searching founders:', error);
+    return errorResponse(res, 'Failed to search founders', 500, error);
+  }
+};
+
+/**
+ * @desc    Get founders by position
+ * @route   GET /api/founders/position/:position
+ * @access  Public
+ */
+export const getFoundersByPosition = async (req, res) => {
+  console.log('=== GET FOUNDERS BY POSITION REQUEST ===');
+  console.log('Position:', req.params.position);
+  
+  try {
+    const { position } = req.params;
+    const founders = await Founder.find({ 
+      position: { $regex: position, $options: 'i' } 
+    }).sort({ createdAt: -1 });
+    
+    console.log(`Found ${founders.length} founders with position: ${position}`);
+    return successResponse(res, founders);
+  } catch (error) {
+    console.error('Error fetching founders by position:', error);
+    return errorResponse(res, 'Failed to fetch founders by position', 500, error);
+  }
+};
+
+/**
+ * @desc    Get founders count
+ * @route   GET /api/founders/count
+ * @access  Public
+ */
+export const getFoundersCount = async (req, res) => {
+  console.log('=== GET FOUNDERS COUNT REQUEST ===');
+  
+  try {
+    const count = await Founder.countDocuments();
+    console.log(`Total founders: ${count}`);
+    
+    return successResponse(res, { count });
+  } catch (error) {
+    console.error('Error getting founders count:', error);
+    return errorResponse(res, 'Failed to get founders count', 500, error);
   }
 };

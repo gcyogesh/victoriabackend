@@ -1,105 +1,6 @@
-
-// import GalleryModel from '../models/GalleryModel.js';
-// import { uploadToCloudinary } from '../middleware/multer.js';
-// import {
-//   successResponse,
-//   errorResponse,
-//   notFoundResponse,
-//   validationErrorResponse,
-//   conflictResponse
-// } from '../utils/responseUtils.js';
-
-// export const createGalleryItem = async (req, res) => {
-//   const { title } = req.body;
-
-//   if (!title) {
-//     return validationErrorResponse(res, 'Title is required');
-//   }
-
-//   if (!req.file) {
-//     return validationErrorResponse(res, 'Image file is required');
-//   }
-
-//   try {
-//     const existing = await GalleryModel.findOne({ title });
-//     if (existing) {
-//       return conflictResponse(res, 'Gallery item');
-//     }
-
-//     const imageUrl = await uploadToCloudinary(req.file.path, 'uploads');
-
-//     const newGalleryItem = new GalleryModel({ title, imageUrl });
-//     const savedGalleryItem = await newGalleryItem.save();
-
-//     successResponse(res, savedGalleryItem, 201);
-//   } catch (error) {
-//     errorResponse(res, 'Failed to create gallery item', 500, error);
-//   }
-// };
-
-// export const getAllGalleryItems = async (req, res) => {
-//   try {
-//     const galleryItems = await GalleryModel.find().sort({ createdAt: -1 });
-//     successResponse(res, galleryItems);
-//   } catch (error) {
-//     errorResponse(res, 'Failed to fetch gallery items', 500, error);
-//   }
-// };
-
-// export const getGalleryItemById = async (req, res) => {
-//   try {
-//     const galleryItem = await GalleryModel.findById(req.params.id);
-//     if (!galleryItem) {
-//       return notFoundResponse(res, 'Gallery item');
-//     }
-//     successResponse(res, galleryItem);
-//   } catch (error) {
-//     errorResponse(res, 'Failed to fetch gallery item', 500, error);
-//   }
-// };
-
-// export const updateGalleryItem = async (req, res) => {
-//   try {
-//     const { title } = req.body;
-//     const updates = {};
-
-//     if (title) updates.title = title;
-
-//     if (req.file) {
-//       const newImageUrl = await uploadToCloudinary(req.file.path, 'uploads');
-//       updates.imageUrl = newImageUrl;
-//     }
-
-//     const updatedGalleryItem = await GalleryModel.findByIdAndUpdate(
-//       req.params.id,
-//       updates,
-//       { new: true, runValidators: true }
-//     );
-
-//     if (!updatedGalleryItem) {
-//       return notFoundResponse(res, 'Gallery item');
-//     }
-
-//     successResponse(res, updatedGalleryItem);
-//   } catch (error) {
-//     errorResponse(res, 'Failed to update gallery item', 500, error);
-//   }
-// };
-
-// export const deleteGalleryItem = async (req, res) => {
-//   try {
-//     const deletedGalleryItem = await GalleryModel.findByIdAndDelete(req.params.id);
-//     if (!deletedGalleryItem) {
-//       return notFoundResponse(res, 'Gallery item');
-//     }
-//     successResponse(res, { message: 'Gallery item deleted successfully' });
-//   } catch (error) {
-//     errorResponse(res, 'Failed to delete gallery item', 500, error);
-//   }
-// };
-
+// controllers/GalleryController.js
 import GalleryModel from '../models/GalleryModel.js';
-import { uploadToCloudinary, deleteFromCloudinary } from '../middleware/multer.js';
+import { getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
 import {
   successResponse,
   errorResponse,
@@ -107,14 +8,6 @@ import {
   validationErrorResponse,
   conflictResponse
 } from '../utils/responseUtils.js';
-
-// Helper function to extract public ID from Cloudinary URL
-const getPublicIdFromUrl = (url) => {
-  if (!url) return null;
-  const parts = url.split('/');
-  const uploadIndex = parts.findIndex(part => part === 'upload');
-  return parts.slice(uploadIndex + 2).join('/').split('.')[0];
-};
 
 export const createGalleryItem = async (req, res) => {
   console.log('=== CREATE GALLERY ITEM REQUEST ===');
@@ -125,6 +18,10 @@ export const createGalleryItem = async (req, res) => {
 
   if (!title) {
     console.log('Validation failed: Title is required');
+    // Clean up uploaded file if validation fails
+    if (req.file) {
+      await deleteLocalFile(req.file.filename);
+    }
     return validationErrorResponse(res, 'Title is required');
   }
 
@@ -138,17 +35,24 @@ export const createGalleryItem = async (req, res) => {
     const existing = await GalleryModel.findOne({ title });
     if (existing) {
       console.log('Conflict: Gallery item with this title already exists');
+      // Clean up uploaded file if there's a conflict
+      await deleteLocalFile(req.file.filename);
       return conflictResponse(res, 'Gallery item with this title already exists');
     }
 
-    console.log('Uploading image to Cloudinary...');
-    const imageResult = await uploadToCloudinary(req.file.path, 'gallery-uploads');
-    console.log('Image uploaded successfully. URL:', imageResult.url);
+    // Get file URL for local storage
+    const imageUrl = getFileUrl(req.file.filename);
+    
+    console.log('File uploaded successfully:', {
+      originalname: req.file.originalname,
+      filename: req.file.filename,
+      path: req.file.path,
+      url: imageUrl
+    });
 
     const newGalleryItem = new GalleryModel({
       title,
-      imageUrl: imageResult.url,
-      publicId: imageResult.public_id
+      imageUrl
     });
 
     console.log('Saving new gallery item to database...');
@@ -158,6 +62,12 @@ export const createGalleryItem = async (req, res) => {
     return successResponse(res, savedGalleryItem, 201);
   } catch (error) {
     console.error('Error creating gallery item:', error);
+    
+    // Clean up uploaded file if creation failed
+    if (req.file) {
+      await deleteLocalFile(req.file.filename);
+    }
+    
     return errorResponse(res, 'Failed to create gallery item', 500, {
       message: error.message,
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
@@ -216,12 +126,15 @@ export const updateGalleryItem = async (req, res) => {
   try {
     const { title } = req.body;
     const updates = {};
-    let oldPublicId = null;
 
     // Get existing item to check for image cleanup
     const existingItem = await GalleryModel.findById(req.params.id);
     if (!existingItem) {
       console.log('Gallery item not found for update');
+      // Clean up uploaded file if item not found
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
+      }
       return notFoundResponse(res, 'Gallery item');
     }
 
@@ -231,14 +144,25 @@ export const updateGalleryItem = async (req, res) => {
     }
 
     if (req.file) {
-      console.log('Uploading new image to Cloudinary...');
-      const imageResult = await uploadToCloudinary(req.file.path, 'gallery-uploads');
-      updates.imageUrl = imageResult.url;
-      updates.publicId = imageResult.public_id;
-      console.log('New image uploaded. URL:', imageResult.url);
+      console.log('Processing new image upload...');
       
-      // Store old public ID for cleanup
-      oldPublicId = existingItem.publicId;
+      // Delete old image file
+      if (existingItem.imageUrl) {
+        const oldFilename = getFilenameFromPath(existingItem.imageUrl);
+        if (oldFilename) {
+          console.log('Deleting old image:', oldFilename);
+          await deleteLocalFile(oldFilename);
+        }
+      }
+      
+      // Set new image URL
+      updates.imageUrl = getFileUrl(req.file.filename);
+      
+      console.log('New image uploaded:', {
+        originalname: req.file.originalname,
+        filename: req.file.filename,
+        url: updates.imageUrl
+      });
     }
 
     console.log('Updating gallery item in database...');
@@ -250,25 +174,23 @@ export const updateGalleryItem = async (req, res) => {
 
     if (!updatedGalleryItem) {
       console.log('Gallery item not found after update attempt');
-      return notFoundResponse(res, 'Gallery item');
-    }
-
-    // Clean up old image if it was replaced
-    if (oldPublicId) {
-      try {
-        console.log('Cleaning up old image from Cloudinary...');
-        await deleteFromCloudinary(oldPublicId);
-        console.log('Old image deleted successfully');
-      } catch (deleteError) {
-        console.error('Error deleting old image:', deleteError);
-        // Continue even if cleanup fails
+      // Clean up uploaded file if update failed
+      if (req.file) {
+        await deleteLocalFile(req.file.filename);
       }
+      return notFoundResponse(res, 'Gallery item');
     }
 
     console.log('Gallery item updated successfully:', updatedGalleryItem);
     return successResponse(res, updatedGalleryItem);
   } catch (error) {
     console.error('Error updating gallery item:', error);
+    
+    // Clean up uploaded file if update failed
+    if (req.file) {
+      await deleteLocalFile(req.file.filename);
+    }
+    
     return errorResponse(res, 'Failed to update gallery item', 500, {
       message: error.message,
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
@@ -289,24 +211,21 @@ export const deleteGalleryItem = async (req, res) => {
       return notFoundResponse(res, 'Gallery item');
     }
 
-    // Delete image from Cloudinary if exists
-    if (galleryItem.publicId) {
-      try {
-        console.log('Deleting image from Cloudinary...');
-        await deleteFromCloudinary(galleryItem.publicId);
-        console.log('Image deleted from Cloudinary');
-      } catch (deleteError) {
-        console.error('Error deleting image from Cloudinary:', deleteError);
-        // Continue with deletion even if image cleanup fails
+    // Delete associated image file
+    if (galleryItem.imageUrl) {
+      const filename = getFilenameFromPath(galleryItem.imageUrl);
+      if (filename) {
+        console.log('Deleting associated image:', filename);
+        await deleteLocalFile(filename);
       }
     }
 
     console.log('Deleting gallery item from database...');
     await GalleryModel.findByIdAndDelete(req.params.id);
-    console.log('Gallery item deleted successfully');
+    console.log('Gallery item and associated files deleted successfully');
 
     return successResponse(res, { 
-      message: 'Gallery item deleted successfully',
+      message: 'Gallery item and associated files deleted successfully',
       deletedItem: galleryItem
     });
   } catch (error) {
@@ -317,3 +236,77 @@ export const deleteGalleryItem = async (req, res) => {
     });
   }
 };
+
+// Additional helper functions
+
+// Get gallery items with pagination
+export const getGalleryItemsPaginated = async (req, res) => {
+  console.log('=== GET PAGINATED GALLERY ITEMS REQUEST ===');
+  
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    console.log(`Fetching page ${page} with limit ${limit}`);
+    
+    const [galleryItems, totalCount] = await Promise.all([
+      GalleryModel.find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      GalleryModel.countDocuments()
+    ]);
+    
+    const totalPages = Math.ceil(totalCount / limit);
+    
+    console.log(`Found ${galleryItems.length} items out of ${totalCount} total`);
+    
+    return successResponse(res, {
+      items: galleryItems,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems: totalCount,
+        itemsPerPage: limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching paginated gallery items:', error);
+    return errorResponse(res, 'Failed to fetch gallery items', 500, {
+      message: error.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    });
+  }
+};
+
+// Search gallery items by title
+export const searchGalleryItems = async (req, res) => {
+  console.log('=== SEARCH GALLERY ITEMS REQUEST ===');
+  
+  try {
+    const { q } = req.query;
+    
+    if (!q) {
+      return validationErrorResponse(res, 'Search query is required');
+    }
+    
+    console.log('Search query:', q);
+    
+    const galleryItems = await GalleryModel.find({
+      title: { $regex: q, $options: 'i' }
+    }).sort({ createdAt: -1 });
+    
+    console.log(`Found ${galleryItems.length} items matching "${q}"`);
+    
+    return successResponse(res, galleryItems);
+  } catch (error) {
+    console.error('Error searching gallery items:', error);
+    return errorResponse(res, 'Failed to search gallery items', 500, {
+      message: error.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    });
+  }
+};  

@@ -1,23 +1,24 @@
-import express from "express";
-import {
-  createService,
-  getAllServices,
+// routes/serviceRoutes.js
+import express from 'express';
+import { 
+  createService, 
+  getAllServices, 
   getServiceBySlug,
-  updateService,
+  getServiceById,
+  updateService, 
   deleteService,
-} from "../controllers/ServiceController.js";
-
+  toggleFeaturedService
+} from '../controllers/ServiceController.js';
 
 const router = express.Router();
 
-// Public routes
-router.get("/", getAllServices);
-router.get("/:slug", getServiceBySlug);
-
-// Protected routes (admin only)
-// router.use(protect);
-router.post("/", createService);
-router.put("/:id", updateService);
-router.delete("/:id", deleteService);
+// Service routes
+router.post('/', createService);                    // Create service
+router.get('/', getAllServices);                    // Get all services (with optional featured filter)
+router.get('/id/:id', getServiceById);            // Get service by ID
+router.get('/:slug', getServiceBySlug);           // Get service by slug
+router.put('/:id', updateService);                // Update service
+router.patch('/:id/featured', toggleFeaturedService); // Toggle featured status
+router.delete('/:id', deleteService);             // Delete service
 
 export default router;

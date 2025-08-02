@@ -14,7 +14,7 @@ const teamMemberSchema = new mongoose.Schema(
       trim: true,
       maxlength: [50, "Role cannot exceed 50 characters"],
     },
-    imageUrl: {
+    imageUrl: { 
       type: String,
       required: [true, "Image URL is required"],
     }

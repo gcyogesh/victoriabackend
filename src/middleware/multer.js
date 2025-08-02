@@ -4,21 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { promisify } from 'util';
-import { v2 as cloudinary } from 'cloudinary';
-import dotenv from 'dotenv';
-
-dotenv.config(); // Load .env variables
 
 // Setup __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Cloudinary configuration
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 // Ensure uploads directory exists
 const ensureUploadsDir = async () => {
@@ -30,7 +19,7 @@ const ensureUploadsDir = async () => {
   }
 };
 
-// Multer storage config (temporary disk storage)
+// Multer storage config
 const storage = multer.diskStorage({
   destination: async function (req, file, cb) {
     await ensureUploadsDir();
@@ -53,7 +42,7 @@ const imageFilter = (req, file, cb) => {
   }
 };
 
-// Multer config
+// Base multer configuration
 const baseMulterConfig = {
   storage: storage,
   fileFilter: imageFilter,
@@ -62,20 +51,31 @@ const baseMulterConfig = {
   },
 };
 
-// Upload middleware
+// Upload middleware with enhanced error handling
 export const singleUpload = (fieldName) => multer(baseMulterConfig).single(fieldName);
 export const arrayUpload = (fieldName, maxCount) => multer(baseMulterConfig).array(fieldName, maxCount);
-// export const fieldsUpload = (fieldsConfig) => multer(baseMulterConfig).fields(fieldsConfig);
-// middleware/multer.js
-// ... (previous imports remain the same)
 
 export const fieldsUpload = (fieldsConfig) => {
   return (req, res, next) => {
+    console.log('=== MULTER FIELDS CONFIG ===');
+    console.log('Expected fields:', fieldsConfig);
+    
     const upload = multer(baseMulterConfig).fields(fieldsConfig);
     
     upload(req, res, (err) => {
       if (err) {
         console.error('Multer upload error:', err);
+        
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          console.error('Unexpected field received:', err.field);
+          console.error('Expected fields:', fieldsConfig.map(f => f.name));
+          return res.status(400).json({
+            success: false,
+            message: `Unexpected field '${err.field}'. Expected fields: ${fieldsConfig.map(f => f.name).join(', ')}`,
+            expectedFields: fieldsConfig.map(f => f.name),
+            receivedField: err.field
+          });
+        }
         
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(413).json({
@@ -106,7 +106,8 @@ export const fieldsUpload = (fieldsConfig) => {
             originalname: f.originalname,
             size: f.size,
             mimetype: f.mimetype,
-            path: f.path
+            path: f.path,
+            filename: f.filename
           }))
         })));
       }
@@ -116,52 +117,89 @@ export const fieldsUpload = (fieldsConfig) => {
   };
 };
 
-// Upload file to Cloudinary and delete local
-export const uploadToCloudinary = async (localFilePath, folder = 'uploads') => {
-  try {
-    const result = await cloudinary.uploader.upload(localFilePath, { folder });
-    fs.unlinkSync(localFilePath); // Delete local after upload
-    return {
-      url: result.secure_url,
-      publicId: result.public_id
-    };
-  } catch (error) {
-    throw new Error('Cloudinary upload failed: ' + error.message);
+// Specific middleware for blog uploads
+export const blogImageUpload = fieldsUpload([
+  { name: 'imageUrl', maxCount: 1 }
+]);
+
+export const blogWithAuthorUpload = fieldsUpload([
+  { name: 'imageUrl', maxCount: 1 },
+  { name: 'authorImageUrl', maxCount: 1 }
+]);
+
+/**
+ * Get full file URL with protocol and domain
+ * @param {string} filename - The filename
+ * @param {object} req - Express request object (optional)
+ * @returns {string} - Full URL to the file
+ */
+export const getFileUrl = (filename, req = null) => {
+  // Try to get base URL from environment variable first
+  let baseUrl = process.env.BASE_URL;
+  
+  // If no BASE_URL in env and we have request object, construct from request
+  if (!baseUrl && req) {
+    const protocol = req.protocol;
+    const host = req.get('host');
+    baseUrl = `${protocol}://${host}`;
   }
+  
+  // Fallback to localhost if nothing else works
+  if (!baseUrl) {
+    baseUrl = 'http://localhost:5000';
+  }
+  
+  return `${baseUrl}/uploads/${filename}`;
 };
 
-// Delete file from Cloudinary
-export const deleteFromCloudinary = async (publicId) => {
+/**
+ * Get full file URL with request context (recommended)
+ * @param {string} filename - The filename
+ * @param {object} req - Express request object
+ * @returns {string} - Full URL to the file
+ */
+export const getFileUrlWithRequest = (filename, req) => {
+  const protocol = req.protocol;
+  const host = req.get('host');
+  return `${protocol}://${host}/uploads/${filename}`;
+};
+
+// Helper to get full file path
+export const getFilePath = (filename) => {
+  return path.join(__dirname, '../../../uploads', filename);
+};
+
+// Helper to delete local files
+export const deleteLocalFile = async (filename) => {
   try {
-    await cloudinary.uploader.destroy(publicId);
+    const filePath = getFilePath(filename);
+    await promisify(fs.unlink)(filePath);
+    console.log(`File deleted: ${filename}`);
     return true;
   } catch (error) {
-    throw new Error('Cloudinary delete failed: ' + error.message);
+    console.error(`Error deleting file ${filename}:`, error.message);
+    return false;
   }
 };
 
-// Get local file URL (optional if using local hosting fallback)
-export const getFileUrl = (filename) => `/uploads/${filename}`;
-
-// Extract public ID from Cloudinary URL
-export const getPublicIdFromUrl = (url) => {
-  try {
-    // Handle different Cloudinary URL formats:
-    // 1. Standard format: https://res.cloudinary.com/<cloud_name>/<resource_type>/<type>/<version>/<public_id>.<format>
-    // 2. With transformations: https://res.cloudinary.com/<cloud_name>/image/upload/<transformations>/<version>/<public_id>.<format>
-    const matches = url.match(/\/upload\/(?:[^/]+\/)*v\d+\/(.+?)\.\w+$/);
-    
-    if (!matches || matches.length < 2) {
-      // Try matching URL without transformations
-      const simpleMatch = url.match(/\/upload\/v\d+\/(.+?)\.\w+$/);
-      if (simpleMatch && simpleMatch.length >= 2) {
-        return simpleMatch[1];
-      }
-      throw new Error('Invalid Cloudinary URL format');
-    }
-    
-    return matches[1];
-  } catch (error) {
-    throw new Error('Failed to extract public ID from URL: ' + error.message);
+// Helper to extract filename from file path or URL
+export const getFilenameFromPath = (filePath) => {
+  if (!filePath) return null;
+  
+  // Handle full URLs (e.g., http://localhost:5000/uploads/filename.jpg)
+  if (filePath.includes('/uploads/')) {
+    return filePath.split('/uploads/')[1];
   }
+  
+  // If it's just a filename
+  return path.basename(filePath);
+};
+
+// Debug middleware to log form data
+export const debugFormData = (req, res, next) => {
+  console.log('=== INCOMING FORM DATA DEBUG ===');
+  console.log('Content-Type:', req.get('Content-Type'));
+  console.log('Body fields:', Object.keys(req.body || {}));
+  console.log('Body values:', req.body);
+  next();
 };

@@ -1,25 +1,25 @@
-import express from "express";
-import { 
-  createSubService, 
-  getSubServices, 
-  getSubService, 
-  updateSubService, 
-  deleteSubService,
-  getSubServicesByParent
-} from "../controllers/SubServiceController.js";
 
+// routes/subServiceRoutes.js
+import express from 'express';
+import {
+  createSubService,
+  getSubServices,
+  getSubServicesByParent,
+  getSubService,
+  updateSubService,
+  deleteSubService,
+  getSubServicesByParentSlug
+} from '../controllers/SubServiceController.js';
 
 const router = express.Router();
 
-// Public routes
-router.get("/", getSubServices);
-router.get("/parent/:parentId", getSubServicesByParent);
-router.get("/:id", getSubService);
-
-// Protected admin routes
-
-router.post("/", createSubService);
-router.put("/:id", updateSubService);
-router.delete("/:id", deleteSubService);
+// Sub-service routes
+router.post('/', createSubService);                           // Create sub-service
+router.get('/', getSubServices);                             // Get all sub-services
+router.get('/parent/:parentId', getSubServicesByParent);    // Get by parent ID
+router.get('/parent/slug/:slug', getSubServicesByParentSlug); // Get by parent slug
+router.get('/:id', getSubService);                          // Get single sub-service
+router.put('/:id', updateSubService);                       // Update sub-service
+router.delete('/:id', deleteSubService);                    // Delete sub-service
 
 export default router;

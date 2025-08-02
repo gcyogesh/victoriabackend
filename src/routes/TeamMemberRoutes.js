@@ -1,32 +1,27 @@
+// routes/teamMemberRoutes.js
 import express from 'express';
-import { 
-  createTeamMember, 
-  getTeamMembers, 
-  getTeamMemberById, 
-  updateTeamMember, 
-  deleteTeamMember 
-} from '../controllers/TeamMemberController.js';
-
 import { singleUpload } from '../middleware/multer.js';
+import {
+  createTeamMember,
+  getTeamMembers,
+  getTeamMemberById,
+  updateTeamMember,
+  deleteTeamMember,
+  getTeamMembersByRole,
+  searchTeamMembers,
+  getTeamMembersCount
+} from '../controllers/TeamMemberController.js';
 
 const router = express.Router();
 
-// router.route('/')
-//   .post(protect, singleUpload('image'), createTeamMember)
-//   .get(getTeamMembers);
-
-// router.route('/:id')
-//   .get(getTeamMemberById)
-//   .put(protect, singleUpload('image'), updateTeamMember)
-//   .delete(protect, deleteTeamMember);
-
-router.route('/')
-  .post(singleUpload('imageUrl'), createTeamMember)
-  .get(getTeamMembers);
-
-router.route('/:id')
-  .get(getTeamMemberById)
-  .put(singleUpload('imageUrl'), updateTeamMember)
-  .delete(deleteTeamMember);
+// Team member routes
+router.post('/', singleUpload('image'), createTeamMember);        // Create team member
+router.get('/', getTeamMembers);                                  // Get all team members
+router.get('/count', getTeamMembersCount);                       // Get team members count
+router.get('/role/:role', getTeamMembersByRole);                 // Get by role
+router.get('/search/:query', searchTeamMembers);                 // Search team members
+router.get('/:id', getTeamMemberById);                           // Get single team member
+router.put('/:id', singleUpload('image'), updateTeamMember);     // Update team member
+router.delete('/:id', deleteTeamMember);                         // Delete team member
 
 export default router;

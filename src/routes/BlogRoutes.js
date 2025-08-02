@@ -1,41 +1,23 @@
 import express from 'express';
-import {
-  createBlog,
-  getAllBlogs,
-  getBlogBySlug,
-  updateBlog,
-  deleteBlog
+import { 
+  createBlog, 
+  getAllBlogs, 
+  getBlogBySlug, 
+  updateBlog, 
+  deleteBlog 
 } from '../controllers/BlogController.js';
-import { fieldsUpload } from '../middleware/multer.js';
-
+import { blogImageUpload } from '../middleware/multer.js';
 
 const router = express.Router();
 
-// Get all blog posts
+// Debug middleware (optional - remove in production)
+// router.use(debugFormData);
+
+// Blog routes
+router.post('/', blogImageUpload, createBlog);
 router.get('/', getAllBlogs);
-
-// Get a single blog post by slug
 router.get('/:slug', getBlogBySlug);
-
-// Create a new blog post (Admin only)
-router.post(
-  '/',
-  fieldsUpload([
-    { name: 'imageUrl', maxCount: 1 }
-  ]),
-  createBlog
-);
-
-// Update a blog post by ID (Admin only)
-router.put(
-  '/:id',
-  fieldsUpload([
-    { name: 'imageUrl', maxCount: 1 }
-  ]),
-  updateBlog
-);
-
-// Delete a blog post by ID (Admin only)
+router.put('/:id', blogImageUpload, updateBlog);
 router.delete('/:id', deleteBlog);
 
 export default router;
