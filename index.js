@@ -28,6 +28,14 @@ const API = process.env.API || 'api/v1';
 app.use(cookieParser());
 app.use(express.json());
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 const allowedOrigins = ['http://localhost:3000', 'https://www.victoriaclean.com.au'];
 
 app.use(cors({

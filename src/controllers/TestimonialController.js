@@ -61,14 +61,15 @@ export const createTestimonial = async (req, res) => {
       });
     }
 
-    // Get file URL for local storage
-    const imageUrl = getFileUrl(req.file.filename);
+    // Get file URL for local storage with dynamic protocol/host
+    const imageUrl = getFileUrlWithRequest(req.file.filename, req);
     
     console.log('File uploaded successfully:', {
       originalname: req.file.originalname,
       filename: req.file.filename,
       path: req.file.path,
-      url: imageUrl
+      url: imageUrl,
+      generatedFrom: `${req.protocol}://${req.get('host')}`
     });
 
     const testimonial = new ClientReviewModel({
@@ -106,6 +107,7 @@ export const createTestimonial = async (req, res) => {
     return errorResponse(res, "Failed to create testimonial", 500, error);
   }
 };
+
 
 // @desc    Update a testimonial
 // @route   PUT /api/testimonials/:id
@@ -158,13 +160,14 @@ export const updateTestimonial = async (req, res) => {
           }
         }
         
-        // Set new image URL
-        imageUrl = getFileUrl(req.file.filename);
+        // Set new image URL with dynamic protocol/host
+        imageUrl = getFileUrlWithRequest(req.file.filename, req);
         
         console.log('New image uploaded:', {
           originalname: req.file.originalname,
           filename: req.file.filename,
-          url: imageUrl
+          url: imageUrl,
+          generatedFrom: `${req.protocol}://${req.get('host')}`
         });
       } catch (uploadError) {
         console.error('Image processing error:', uploadError);

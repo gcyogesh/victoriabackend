@@ -1,6 +1,6 @@
 // controllers/BlogController.js
 import BlogModel from '../models/BlogModel.js';
-import { getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
+import { getFileUrl, deleteLocalFile, getFilenameFromPath, getFileUrlWithRequest } from '../middleware/multer.js';
 import slugify from 'slugify';
 import {
   successResponse,
@@ -14,6 +14,8 @@ export const createBlog = async (req, res) => {
   console.log('=== CREATE BLOG REQUEST ===');
   console.log('Request body:', req.body);
   console.log('Request files:', req.files);
+  console.log('Request protocol:', req.protocol);
+  console.log('Request host:', req.get('host'));
   
   try {
     const { title, description } = req.body;
@@ -32,30 +34,38 @@ export const createBlog = async (req, res) => {
     const existingBlog = await BlogModel.findOne({ slug });
     if (existingBlog) {
       console.log('Conflict - blog with same slug exists');
+      
+      // Clean up uploaded file if conflict occurs
+      if (req.files && req.files['imageUrl']) {
+        const filename = req.files['imageUrl'][0].filename;
+        await deleteLocalFile(filename);
+      }
+      
       return conflictResponse(res, 'Blog');
     }
 
-    // Get the uploaded file info
+    // Get the uploaded file info and generate full URL based on request
     const uploadedFile = req.files['imageUrl'][0];
-    const imageUrl = getFileUrl(uploadedFile.filename);
+    const imageUrl = getFileUrlWithRequest(uploadedFile.filename, req);
     
     console.log('File uploaded successfully:', {
       originalname: uploadedFile.originalname,
       filename: uploadedFile.filename,
       path: uploadedFile.path,
-      url: imageUrl
+      url: imageUrl,
+      generatedFrom: `${req.protocol}://${req.get('host')}`
     });
 
     const newBlog = new BlogModel({
       title,
       description,
       slug,
-      imageUrl: imageUrl // Store the URL path
+      imageUrl: imageUrl // Store the full URL with dynamic protocol and host
     });
 
     console.log('Saving blog to database...');
     const savedBlog = await newBlog.save();
-    console.log('Blog saved successfully:', savedBlog);
+    console.log('Blog saved successfully with URL:', savedBlog.imageUrl);
 
     return successResponse(res, savedBlog, 201);
   } catch (error) {
@@ -104,41 +114,74 @@ export const updateBlog = async (req, res) => {
   console.log('Request params:', req.params);
   console.log('Request body:', req.body);
   console.log('Request files:', req.files);
+  console.log('Request protocol:', req.protocol);
+  console.log('Request host:', req.get('host'));
   
   try {
     const { title, description } = req.body;
-    const updates = {
-      ...(title && { title }),
-      ...(description && { description })
-    };
-
-    // Handle image update
-    if (req.files && req.files['imageUrl']) {
-      console.log('Processing new image upload...');
+    const blog = await BlogModel.findById(req.params.id);
+    
+    if (!blog) {
+      console.log('Blog not found for update');
       
-      // Get old blog to delete old image
-      const oldBlog = await BlogModel.findById(req.params.id);
-      if (oldBlog?.imageUrl) {
-        const oldFilename = getFilenameFromPath(oldBlog.imageUrl);
-        if (oldFilename) {
-          console.log('Deleting old image:', oldFilename);
-          await deleteLocalFile(oldFilename);
-        }
+      // Clean up uploaded file if blog not found
+      if (req.files && req.files['imageUrl']) {
+        const filename = req.files['imageUrl'][0].filename;
+        await deleteLocalFile(filename);
       }
       
-      // Set new image URL
-      const uploadedFile = req.files['imageUrl'][0];
-      updates.imageUrl = getFileUrl(uploadedFile.filename);
-      
-      console.log('New image uploaded:', {
-        originalname: uploadedFile.originalname,
-        filename: uploadedFile.filename,
-        url: updates.imageUrl
+      return notFoundResponse(res, 'Blog post');
+    }
+
+    // Validate at least one field is being updated
+    if (!title && !description && (!req.files || !req.files['imageUrl'])) {
+      return validationErrorResponse(res, {
+        update: 'At least one field (title, description, or image) must be provided for update'
       });
     }
 
-    // Handle slug update if title changed
-    if (title) {
+    const updates = {};
+
+    // Handle image update
+    if (req.files && req.files['imageUrl']) {
+      try {
+        console.log('Processing new image upload...');
+        
+        // Delete old image file if it exists
+        if (blog.imageUrl) {
+          const oldFilename = getFilenameFromPath(blog.imageUrl);
+          if (oldFilename) {
+            console.log('Deleting old image:', oldFilename);
+            await deleteLocalFile(oldFilename);
+          }
+        }
+        
+        // Set new image URL with dynamic protocol and host
+        const uploadedFile = req.files['imageUrl'][0];
+        updates.imageUrl = getFileUrlWithRequest(uploadedFile.filename, req);
+        
+        console.log('New image uploaded:', {
+          originalname: uploadedFile.originalname,
+          filename: uploadedFile.filename,
+          url: updates.imageUrl,
+          generatedFrom: `${req.protocol}://${req.get('host')}`
+        });
+      } catch (uploadError) {
+        console.error('Image processing error:', uploadError);
+        
+        // Clean up uploaded file if error occurs
+        if (req.files && req.files['imageUrl']) {
+          const filename = req.files['imageUrl'][0].filename;
+          await deleteLocalFile(filename);
+        }
+        
+        return errorResponse(res, 'Failed to process new blog image', 500, uploadError);
+      }
+    }
+
+    // Handle title and slug update
+    if (title && title !== blog.title) {
+      updates.title = title;
       updates.slug = slugify(title, { lower: true, strict: true });
       console.log('New slug generated:', updates.slug);
       
@@ -161,30 +204,19 @@ export const updateBlog = async (req, res) => {
       }
     }
 
-    console.log('Updating blog in database...');
-    const updatedBlog = await BlogModel.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { 
-        new: true, 
-        runValidators: true,
-        context: 'query'
-      }
-    );
-
-    if (!updatedBlog) {
-      console.log('Blog not found for update');
-      
-      // Clean up uploaded file if blog not found
-      if (req.files && req.files['imageUrl']) {
-        const filename = req.files['imageUrl'][0].filename;
-        await deleteLocalFile(filename);
-      }
-      
-      return notFoundResponse(res, 'Blog post');
+    // Handle description update
+    if (description) {
+      updates.description = description;
+      console.log('Description updated to:', description);
     }
 
-    console.log('Blog updated successfully:', updatedBlog);
+    // Update fields
+    Object.assign(blog, updates);
+
+    console.log('Saving updated blog...');
+    const updatedBlog = await blog.save();
+    console.log('Blog updated successfully with URL:', updatedBlog.imageUrl);
+
     return successResponse(res, updatedBlog);
   } catch (error) {
     console.error('Error in updateBlog:', error);

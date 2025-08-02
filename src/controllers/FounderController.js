@@ -1,6 +1,6 @@
 // controllers/FounderController.js
 import Founder from '../models/FounderModel.js';
-import { singleUpload, getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
+import { singleUpload, getFileUrlWithRequest, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
 import {
   successResponse,
   errorResponse,
@@ -64,14 +64,15 @@ export const createFounder = async (req, res) => {
       return conflictResponse(res, 'Founder with this name already exists');
     }
 
-    // Get file URL for local storage
-    const imageUrl = getFileUrl(req.file.filename);
+    // Get file URL for local storage with dynamic protocol/host
+    const imageUrl = getFileUrlWithRequest(req.file.filename, req);
     
     console.log('File uploaded successfully:', {
       originalname: req.file.originalname,
       filename: req.file.filename,
       path: req.file.path,
-      url: imageUrl
+      url: imageUrl,
+      generatedFrom: `${req.protocol}://${req.get('host')}`
     });
 
     const newFounder = new Founder({
@@ -190,7 +191,7 @@ export const updateFounder = async (req, res) => {
     // Validate at least one field is being updated
     if (!name && !position && !title && !description && !req.file) {
       return validationErrorResponse(res, {
-        update: 'At least one field must be provided for update'
+        update: 'At least one field (name, position, title, description, or image) must be provided for update'
       });
     }
 
@@ -229,13 +230,14 @@ export const updateFounder = async (req, res) => {
           }
         }
         
-        // Set new image URL
-        imageUrl = getFileUrl(req.file.filename);
+        // Set new image URL with dynamic protocol/host
+        imageUrl = getFileUrlWithRequest(req.file.filename, req);
         
         console.log('New image uploaded:', {
           originalname: req.file.originalname,
           filename: req.file.filename,
-          url: imageUrl
+          url: imageUrl,
+          generatedFrom: `${req.protocol}://${req.get('host')}`
         });
       } catch (uploadError) {
         console.error('Image processing error:', uploadError);
@@ -303,9 +305,11 @@ export const deleteFounder = async (req, res) => {
   console.log('Founder ID:', req.params.id);
   
   try {
-    console.log(`Attempting to delete founder with ID: ${req.params.id}`);
+    const { id } = req.params;
     
-    const founder = await Founder.findById(req.params.id);
+    console.log(`Attempting to delete founder with ID: ${id}`);
+    
+    const founder = await Founder.findById(id);
     if (!founder) {
       console.log('Founder not found for deletion');
       return notFoundResponse(res, 'Founder');
@@ -333,8 +337,6 @@ export const deleteFounder = async (req, res) => {
     return errorResponse(res, 'Failed to delete founder', 500, error);
   }
 };
-
-// Additional helper functions
 
 /**
  * @desc    Search founders by name, position, or title
@@ -375,6 +377,13 @@ export const getFoundersByPosition = async (req, res) => {
   
   try {
     const { position } = req.params;
+    
+    if (!position) {
+      return validationErrorResponse(res, {
+        position: 'Position parameter is required'
+      });
+    }
+    
     const founders = await Founder.find({ 
       position: { $regex: position, $options: 'i' } 
     }).sort({ createdAt: -1 });
