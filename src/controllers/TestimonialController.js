@@ -1,6 +1,6 @@
 // controllers/TestimonialController.js
 import ClientReviewModel from '../models/TestimonialModel.js';
-import { singleUpload, getFileUrl, deleteLocalFile, getFilenameFromPath } from '../middleware/multer.js';
+import { getFileUrl, deleteLocalFile, getFilenameFromPath, getFileUrlWithRequest } from '../middleware/multer.js';
 import { 
   successResponse, 
   errorResponse, 
@@ -62,7 +62,7 @@ export const createTestimonial = async (req, res) => {
     }
 
     // Get file URL for local storage with dynamic protocol/host
-    const imageUrl = getFileUrlWithRequest(req.file.filename, req);
+    const imageUrl = getFileUrl(req.file.filename, req);
     
     console.log('File uploaded successfully:', {
       originalname: req.file.originalname,
