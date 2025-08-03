@@ -9,26 +9,43 @@ import { promisify } from 'util';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Get the uploads directory path consistently
+const getUploadsPath = () => {
+  return path.join(process.cwd(), 'uploads');
+};
+
 // Ensure uploads directory exists
 const ensureUploadsDir = async () => {
-  const uploadPath = path.join(__dirname, '../../../uploads');
+  const uploadPath = getUploadsPath();
+
   try {
     await promisify(fs.access)(uploadPath);
+    console.log('Uploads directory exists:', uploadPath);
   } catch {
     await promisify(fs.mkdir)(uploadPath, { recursive: true });
+    console.log('Created uploads directory:', uploadPath);
   }
 };
 
 // Multer storage config
 const storage = multer.diskStorage({
   destination: async function (req, file, cb) {
-    await ensureUploadsDir();
-    cb(null, path.join(__dirname, '../../../uploads'));
+    try {
+      await ensureUploadsDir();
+      const uploadPath = getUploadsPath();
+      console.log('Saving file to:', uploadPath);
+      cb(null, uploadPath);
+    } catch (error) {
+      console.error('Error setting up destination:', error);
+      cb(error);
+    }
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const filename = file.fieldname + '-' + uniqueSuffix + ext;
+    console.log('Generated filename:', filename);
+    cb(null, filename);
   }
 });
 
@@ -59,6 +76,7 @@ export const fieldsUpload = (fieldsConfig) => {
   return (req, res, next) => {
     console.log('=== MULTER FIELDS CONFIG ===');
     console.log('Expected fields:', fieldsConfig);
+    console.log('Upload path will be:', getUploadsPath());
     
     const upload = multer(baseMulterConfig).fields(fieldsConfig);
     
@@ -88,6 +106,16 @@ export const fieldsUpload = (fieldsConfig) => {
           return res.status(415).json({
             success: false,
             message: 'Only image files are allowed (JPEG, PNG, GIF, WEBP)'
+          });
+        }
+
+        // Handle ENOENT errors specifically
+        if (err.code === 'ENOENT') {
+          console.error('File not found error. Check upload directory permissions and path.');
+          return res.status(500).json({
+            success: false,
+            message: 'Upload directory not accessible. Please check server configuration.',
+            error: err.message
           });
         }
         
@@ -166,7 +194,7 @@ export const getFileUrlWithRequest = (filename, req) => {
 
 // Helper to get full file path
 export const getFilePath = (filename) => {
-  return path.join(__dirname, '../../../uploads', filename);
+  return path.join(getUploadsPath(), filename);
 };
 
 // Helper to delete local files
@@ -201,5 +229,35 @@ export const debugFormData = (req, res, next) => {
   console.log('Content-Type:', req.get('Content-Type'));
   console.log('Body fields:', Object.keys(req.body || {}));
   console.log('Body values:', req.body);
+  console.log('Upload directory:', getUploadsPath());
   next();
+};
+
+// Helper function to check if uploads directory exists and is writable
+export const checkUploadsDirectory = async () => {
+  const uploadPath = getUploadsPath();
+  
+  try {
+    // Check if directory exists
+    await promisify(fs.access)(uploadPath, fs.constants.F_OK);
+    console.log('✓ Uploads directory exists:', uploadPath);
+    
+    // Check if directory is writable
+    await promisify(fs.access)(uploadPath, fs.constants.W_OK);
+    console.log('✓ Uploads directory is writable');
+    
+    return true;
+  } catch (error) {
+    console.error('✗ Uploads directory issue:', error.message);
+    console.log('Attempting to create uploads directory...');
+    
+    try {
+      await promisify(fs.mkdir)(uploadPath, { recursive: true });
+      console.log('✓ Created uploads directory:', uploadPath);
+      return true;
+    } catch (createError) {
+      console.error('✗ Failed to create uploads directory:', createError.message);
+      return false;
+    }
+  }
 };
