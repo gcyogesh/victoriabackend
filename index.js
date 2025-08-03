@@ -38,6 +38,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const allowedOrigins = ['http://localhost:3000', 'https://www.victoriaclean.com.au'];
 
+
+
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -49,8 +51,29 @@ app.use(cors({
   credentials: true,
 }));
 
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  // Log request details for debugging
+  console.log('Request details:', {
+    protocol: req.protocol,
+    secure: req.secure,
+    host: req.get('host'),
+    'x-forwarded-proto': req.get('x-forwarded-proto'),
+    'x-forwarded-host': req.get('x-forwarded-host')
+  });
+  
+  // Force HTTPS protocol detection in production
+  if (req.get('x-forwarded-proto') === 'https') {
+    req.protocol = 'https';
+    req.secure = true;
+  }
+  
+  next();
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

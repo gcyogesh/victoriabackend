@@ -1,4 +1,4 @@
-// middleware/multer.js
+// middleware/multer.js - Updated version with HTTPS support
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -156,7 +156,7 @@ export const blogWithAuthorUpload = fieldsUpload([
 ]);
 
 /**
- * Get full file URL with protocol and domain
+ * Get full file URL with protocol and domain - FIXED FOR HTTPS
  * @param {string} filename - The filename
  * @param {object} req - Express request object (optional)
  * @returns {string} - Full URL to the file
@@ -167,9 +167,17 @@ export const getFileUrl = (filename, req = null) => {
   
   // If no BASE_URL in env and we have request object, construct from request
   if (!baseUrl && req) {
-    const protocol = req.protocol;
+    // Check for forwarded protocol (from reverse proxy like nginx)
+    let protocol = req.get('x-forwarded-proto') || req.protocol;
+    
+    // Force HTTPS in production (when not localhost)
     const host = req.get('host');
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+      protocol = 'https';
+    }
+    
     baseUrl = `${protocol}://${host}`;
+    console.log('Constructed baseUrl:', baseUrl, 'from protocol:', protocol, 'host:', host);
   }
   
   // Fallback to localhost if nothing else works
@@ -177,19 +185,30 @@ export const getFileUrl = (filename, req = null) => {
     baseUrl = 'http://localhost:5000';
   }
   
-  return `${baseUrl}/uploads/${filename}`;
+  const fullUrl = `${baseUrl}/uploads/${filename}`;
+  console.log('Generated file URL:', fullUrl);
+  return fullUrl;
 };
 
 /**
- * Get full file URL with request context (recommended)
+ * Get full file URL with request context (recommended) - FIXED FOR HTTPS
  * @param {string} filename - The filename
  * @param {object} req - Express request object
  * @returns {string} - Full URL to the file
  */
 export const getFileUrlWithRequest = (filename, req) => {
-  const protocol = req.protocol;
+  // Check for forwarded protocol first (from reverse proxy)
+  let protocol = req.get('x-forwarded-proto') || req.protocol;
   const host = req.get('host');
-  return `${protocol}://${host}/uploads/${filename}`;
+  
+  // Force HTTPS in production (when not localhost)
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+    protocol = 'https';
+  }
+  
+  const fullUrl = `${protocol}://${host}/uploads/${filename}`;
+  console.log('Generated file URL with request:', fullUrl);
+  return fullUrl;
 };
 
 // Helper to get full file path
@@ -227,6 +246,10 @@ export const getFilenameFromPath = (filePath) => {
 export const debugFormData = (req, res, next) => {
   console.log('=== INCOMING FORM DATA DEBUG ===');
   console.log('Content-Type:', req.get('Content-Type'));
+  console.log('Protocol:', req.protocol);
+  console.log('Secure:', req.secure);
+  console.log('X-Forwarded-Proto:', req.get('x-forwarded-proto'));
+  console.log('Host:', req.get('host'));
   console.log('Body fields:', Object.keys(req.body || {}));
   console.log('Body values:', req.body);
   console.log('Upload directory:', getUploadsPath());
