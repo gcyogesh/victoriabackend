@@ -108,5 +108,5 @@ app.use(`/${API}/contactinfo`, ContactInfoRoute);
 
 
 app.get('/', (req, res) => {
-  res.send('Victoria API is running...');
+  res.send('New Changes API is running...');
 });

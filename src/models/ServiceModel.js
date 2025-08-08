@@ -32,6 +32,12 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       maxlength: [200, "Best for cannot exceed 200 characters"]
     },
+    faq: [
+      {
+        question: { type: String, required: true, trim: true },
+        answer: { type: String, required: true, trim: true }
+      }
+    ],
     subservices: [
       {
         title: { type: String, required: true, trim: true }

@@ -33,8 +33,8 @@ export const createService = async (req, res) => {
           filename: req.file.filename
         } : 'No file uploaded');
 
-        const { title, description, bestFor } = req.body;
-        console.log('Request body:', req.body);
+        const { title, description } = req.body;
+        const bestFor = req.body.bestFor || "";
         let subservices = [];
         if (req.body.subservices) {
           try {
@@ -42,6 +42,15 @@ export const createService = async (req, res) => {
             console.log('Parsed subservices:', subservices);
           } catch (e) {
             console.error('Invalid subservices JSON:', e, req.body.subservices);
+          }
+        }
+        let faq = [];
+        if (req.body.faq) {
+          try {
+            faq = JSON.parse(req.body.faq);
+            console.log('Parsed faq:', faq);
+          } catch (e) {
+            console.error('Invalid faq JSON:', e, req.body.faq);
           }
         }
         // Validate required fields BEFORE creating the Service instance
@@ -69,12 +78,13 @@ export const createService = async (req, res) => {
             generatedFrom: `${req.protocol}://${req.get('host')}`
           });
         }
-        console.log('Saving service with:', { title, description, bestFor, subservices, imageUrl });
+        console.log('Saving service with:', { title, description, bestFor, subservices, faq, imageUrl });
         const service = new Service({
           title,
           description,
           bestFor,
           subservices,
+          faq,
           imageUrl
         });
     
