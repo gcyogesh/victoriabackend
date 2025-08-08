@@ -25,7 +25,7 @@ export const createBlog = async (req, res) => {
       return validationErrorResponse(res, 'Title and description are required');
     }
 
-    if (!req.files || !req.files['imageUrl']) {
+    if (!req.files || !req.files['image']) {
       console.log('Validation failed - missing image file');
       return validationErrorResponse(res, 'Blog image is required');
     }
@@ -36,8 +36,8 @@ export const createBlog = async (req, res) => {
       console.log('Conflict - blog with same slug exists');
       
       // Clean up uploaded file if conflict occurs
-      if (req.files && req.files['imageUrl']) {
-        const filename = req.files['imageUrl'][0].filename;
+      if (req.files && req.files['image']) {
+        const filename = req.files['image'][0].filename;
         await deleteLocalFile(filename);
       }
       
@@ -45,7 +45,7 @@ export const createBlog = async (req, res) => {
     }
 
     // Get the uploaded file info and generate full URL based on request
-    const uploadedFile = req.files['imageUrl'][0];
+    const uploadedFile = req.files['image'][0];
     const imageUrl = getFileUrlWithRequest(uploadedFile.filename, req);
     
     console.log('File uploaded successfully:', {
@@ -72,8 +72,8 @@ export const createBlog = async (req, res) => {
     console.error('Error in createBlog:', error);
     
     // Clean up uploaded file if blog creation failed
-    if (req.files && req.files['imageUrl']) {
-      const filename = req.files['imageUrl'][0].filename;
+    if (req.files && req.files['image']) {
+      const filename = req.files['image'][0].filename;
       await deleteLocalFile(filename);
     }
     
@@ -125,8 +125,8 @@ export const updateBlog = async (req, res) => {
       console.log('Blog not found for update');
       
       // Clean up uploaded file if blog not found
-      if (req.files && req.files['imageUrl']) {
-        const filename = req.files['imageUrl'][0].filename;
+      if (req.files && req.files['image']) {
+        const filename = req.files['image'][0].filename;
         await deleteLocalFile(filename);
       }
       
@@ -134,7 +134,7 @@ export const updateBlog = async (req, res) => {
     }
 
     // Validate at least one field is being updated
-    if (!title && !description && (!req.files || !req.files['imageUrl'])) {
+    if (!title && !description && (!req.files || !req.files['image'])) {
       return validationErrorResponse(res, {
         update: 'At least one field (title, description, or image) must be provided for update'
       });
@@ -143,7 +143,7 @@ export const updateBlog = async (req, res) => {
     const updates = {};
 
     // Handle image update
-    if (req.files && req.files['imageUrl']) {
+    if (req.files && req.files['image']) {
       try {
         console.log('Processing new image upload...');
         
@@ -157,7 +157,7 @@ export const updateBlog = async (req, res) => {
         }
         
         // Set new image URL with dynamic protocol and host
-        const uploadedFile = req.files['imageUrl'][0];
+        const uploadedFile = req.files['image'][0];
         updates.imageUrl = getFileUrlWithRequest(uploadedFile.filename, req);
         
         console.log('New image uploaded:', {
@@ -170,8 +170,8 @@ export const updateBlog = async (req, res) => {
         console.error('Image processing error:', uploadError);
         
         // Clean up uploaded file if error occurs
-        if (req.files && req.files['imageUrl']) {
-          const filename = req.files['imageUrl'][0].filename;
+        if (req.files && req.files['image']) {
+          const filename = req.files['image'][0].filename;
           await deleteLocalFile(filename);
         }
         
@@ -195,8 +195,8 @@ export const updateBlog = async (req, res) => {
         console.log('Slug conflict detected');
         
         // Clean up new uploaded file if there's a conflict
-        if (req.files && req.files['imageUrl']) {
-          const filename = req.files['imageUrl'][0].filename;
+        if (req.files && req.files['image']) {
+          const filename = req.files['image'][0].filename;
           await deleteLocalFile(filename);
         }
         
@@ -222,8 +222,8 @@ export const updateBlog = async (req, res) => {
     console.error('Error in updateBlog:', error);
     
     // Clean up uploaded file if update failed
-    if (req.files && req.files['imageUrl']) {
-      const filename = req.files['imageUrl'][0].filename;
+    if (req.files && req.files['image']) {
+      const filename = req.files['image'][0].filename;
       await deleteLocalFile(filename);
     }
     

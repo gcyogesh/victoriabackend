@@ -23,8 +23,8 @@ router.get('/search/:query', searchTestimonials);                 // Search test
 router.get('/:id', getTestimonialById);                           // Get single testimonial
 
 // Protected routes (Admin only)
-router.post('/', singleUpload('imageUrl'), createTestimonial);    // Create testimonial
-router.put('/:id', singleUpload('imageUrl'), updateTestimonial);  // Update testimonial
+router.post('/', singleUpload('image'), createTestimonial);    // Create testimonial
+router.put('/:id', singleUpload('image'), updateTestimonial);  // Update testimonial
 router.delete('/:id', deleteTestimonial);                         // Delete testimonial
 
 export default router;

@@ -27,14 +27,16 @@ const serviceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    subServices: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "SubService"
-    }],
-    hasSubServices: {
-      type: Boolean,
-      default: false
-    }
+    bestFor: {
+      type: String,
+      trim: true,
+      maxlength: [200, "Best for cannot exceed 200 characters"]
+    },
+    subservices: [
+      {
+        title: { type: String, required: true, trim: true }
+      }
+    ],
   },
   { timestamps: true }
 );

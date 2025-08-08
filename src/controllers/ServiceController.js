@@ -33,43 +33,50 @@ export const createService = async (req, res) => {
           filename: req.file.filename
         } : 'No file uploaded');
 
-        const { title, description } = req.body;
-    
-    // Validate required fields
-    if (!title || !description) {
-      console.log('Validation failed - missing required fields');
-      
-      // Clean up uploaded file if validation fails
-      if (req.file) {
-        await deleteLocalFile(req.file.filename);
-      }
-      
-      return validationErrorResponse(res, {
-        title: !title ? 'Title is required' : undefined,
-        description: !description ? 'Description is required' : undefined
-      });
-    }
-    
-    // Handle image upload (optional for services)
-    let imageUrl = null;
-    if (req.file) {
-      // Get file URL for local storage with dynamic protocol/host
-      imageUrl = getFileUrlWithRequest(req.file.filename, req);
-      
-      console.log('File uploaded successfully:', {
-        originalname: req.file.originalname,
-        filename: req.file.filename,
-        path: req.file.path,
-        url: imageUrl,
-        generatedFrom: `${req.protocol}://${req.get('host')}`
-      });
-    }
-    
-    const service = new Service({
-      title,
-      description,
-      imageUrl
-    });
+        const { title, description, bestFor } = req.body;
+        console.log('Request body:', req.body);
+        let subservices = [];
+        if (req.body.subservices) {
+          try {
+            subservices = JSON.parse(req.body.subservices);
+            console.log('Parsed subservices:', subservices);
+          } catch (e) {
+            console.error('Invalid subservices JSON:', e, req.body.subservices);
+          }
+        }
+        // Validate required fields BEFORE creating the Service instance
+        if (!title || !description) {
+          console.log('Validation failed - missing required fields');
+          // Clean up uploaded file if validation fails
+          if (req.file) {
+            await deleteLocalFile(req.file.filename);
+          }
+          return validationErrorResponse(res, {
+            title: !title ? 'Title is required' : undefined,
+            description: !description ? 'Description is required' : undefined
+          });
+        }
+        // Handle image upload (optional for services)
+        let imageUrl = null;
+        if (req.file) {
+          // Get file URL for local storage with dynamic protocol/host
+          imageUrl = getFileUrlWithRequest(req.file.filename, req);
+          console.log('File uploaded successfully:', {
+            originalname: req.file.originalname,
+            filename: req.file.filename,
+            path: req.file.path,
+            url: imageUrl,
+            generatedFrom: `${req.protocol}://${req.get('host')}`
+          });
+        }
+        console.log('Saving service with:', { title, description, bestFor, subservices, imageUrl });
+        const service = new Service({
+          title,
+          description,
+          bestFor,
+          subservices,
+          imageUrl
+        });
     
     console.log('Saving service to database...');
     const createdService = await service.save();
@@ -220,7 +227,15 @@ export const updateService = async (req, res) => {
         } : 'No file uploaded');
 
         const { id } = req.params;
-        const { title, description, isFeatured } = req.body;
+        const { title, description, isFeatured, bestFor } = req.body;
+        let subservices = [];
+        if (req.body.subservices) {
+          try {
+            subservices = JSON.parse(req.body.subservices);
+          } catch (e) {
+            console.error('Invalid subservices JSON:', e);
+          }
+        }
     
     const service = await Service.findById(id);
     
@@ -233,7 +248,7 @@ export const updateService = async (req, res) => {
     }
 
     // Validate at least one field is being updated
-    if (!title && !description && isFeatured === undefined && !req.file) {
+    if (!title && !description && isFeatured === undefined && !req.file && !bestFor && subservices.length === 0) {
       return validationErrorResponse(res, {
         update: 'At least one field (title, description, isFeatured, or image) must be provided for update'
       });
@@ -288,6 +303,14 @@ export const updateService = async (req, res) => {
     if (isFeatured !== undefined) {
       service.isFeatured = isFeatured;
       console.log('Featured status updated to:', isFeatured);
+    }
+    if (bestFor) {
+      service.bestFor = bestFor;
+      console.log('Best for updated to:', bestFor);
+    }
+    if (subservices) {
+      service.subservices = subservices;
+      console.log('Subservices updated to:', subservices);
     }
     service.imageUrl = imageUrl;
 

@@ -147,11 +147,11 @@ export const fieldsUpload = (fieldsConfig) => {
 
 // Specific middleware for blog uploads
 export const blogImageUpload = fieldsUpload([
-  { name: 'imageUrl', maxCount: 1 }
+  { name: 'image', maxCount: 1 }
 ]);
 
 export const blogWithAuthorUpload = fieldsUpload([
-  { name: 'imageUrl', maxCount: 1 },
+  { name: 'image', maxCount: 1 },
   { name: 'authorImageUrl', maxCount: 1 }
 ]);
 
