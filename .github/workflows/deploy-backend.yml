@@ -1,0 +1,30 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main  # or your backend branch
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Deploy backend
+        run: |
+          ssh -o StrictHostKeyChecking=no victoriaaus@184.168.125.236 << 'EOF'
+            cd /var/www/backend-folder
+            git pull origin main
+            npm install --production
+            pm2 restart backend
+          EOF
+      - name: Notify deployment success
+        run: echo "Backend deployment successful!"

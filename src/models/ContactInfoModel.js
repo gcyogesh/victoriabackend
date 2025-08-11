@@ -18,6 +18,7 @@ const contactInfoSchema = new mongoose.Schema(
       twitter: { type: String, default: '' },
       instagram: { type: String, default: '' },
     },
+    googleMapLink: { type: String, default: '' },
   },
   { timestamps: true }
 );
