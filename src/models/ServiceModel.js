@@ -12,7 +12,7 @@ const serviceSchema = new mongoose.Schema(
       type: String,
       required: [true, "Description is required"],
       trim: true,
-      maxlength: [3000 , "Description cannot exceed 3000 characters"],
+      maxlength: [12000 , "Description cannot exceed 3000 characters"],
     },
     imageUrl: {
       type: String,
