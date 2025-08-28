@@ -154,6 +154,11 @@ export const blogWithAuthorUpload = fieldsUpload([
   { name: 'image', maxCount: 1 },
   { name: 'authorImageUrl', maxCount: 1 }
 ]);
+// Specific middleware for feature uploads
+export const featureImageUpload = fieldsUpload([
+  { name: 'image', maxCount: 1 }
+]);
+
 
 /**
  * Get full file URL with protocol and domain - FIXED FOR HTTPS

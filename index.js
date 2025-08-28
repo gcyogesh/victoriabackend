@@ -14,9 +14,8 @@ import GalleryRoutes from "./src/routes/GalleryRoutes.js"
 import TestimonialRoutes from "./src/routes/TestimonialRoutes.js"
 import FounderRoutes from './src/routes/FounderRoutes.js';
 import ContactInfoRoute from './src/routes/ContactInfoRoute.js';
-
-
-
+import FeatureRoutes from './src/routes/featureRoutes.js';
+import  aboutRoutes  from './src/routes/aboutRoutes.js';
 dotenv.config();
 
 const app = express();
@@ -105,8 +104,8 @@ app.use(`/${API}/testimonial`, TestimonialRoutes);
 app.use(`/${API}/founders`,FounderRoutes);
 app.use(`/${API}/contactinfo`, ContactInfoRoute);
 
-
-
+app.use(`/${API}/features`, FeatureRoutes);
+app.use(`/${API}/about`, aboutRoutes);
 app.get('/', (req, res) => {
-  res.send('New Changes wi5h imahe API is running...');
+  res.send('Map Changes wi5h imahe API is running...');
 });
