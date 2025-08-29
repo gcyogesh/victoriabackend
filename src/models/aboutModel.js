@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import slugify from "slugify";
 
 // Section Schema
 const sectionSchema = new mongoose.Schema({
@@ -15,6 +16,14 @@ const categorySchema = new mongoose.Schema({
   image: { type: String },
   sections: [sectionSchema]
 }, { timestamps: true });
+
+// 🔥 Auto-generate slug before saving
+categorySchema.pre("validate", function (next) {
+  if (this.name && !this.slug) {
+    this.slug = slugify(this.name, { lower: true, strict: true });
+  }
+  next();
+});
 
 // About Page Schema
 const aboutSchema = new mongoose.Schema({

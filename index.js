@@ -107,5 +107,5 @@ app.use(`/${API}/contactinfo`, ContactInfoRoute);
 app.use(`/${API}/features`, FeatureRoutes);
 app.use(`/${API}/about`, aboutRoutes);
 app.get('/', (req, res) => {
-  res.send('Map Changes wi5h imahe API is running...');
+  res.send('NEW CHANGES Changes wi5h imahe API is running...');
 });
