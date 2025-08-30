@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getAboutPage,
+  getAboutPageBySlug,
   createOrUpdateAbout,
   updateCategory,
   deleteCategory,
@@ -11,6 +12,9 @@ const router = express.Router();
 
 // GET About page (entire page)
 router.get("/", getAboutPage);
+
+// ✅ GET About page by slug
+router.get("/:slug", getAboutPageBySlug);
 
 // POST About page (create or update full data)
 router.post("/", createOrUpdateAbout);

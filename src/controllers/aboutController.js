@@ -58,6 +58,27 @@ export const updateCategory = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+// ✅ GET About page by category slug
+export const getAboutPageBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const about = await About.findOne();
+    if (!about) {
+      return res.status(404).json({ success: false, message: "About page not found" });
+    }
+
+    // find category by slug
+    const category = about.categories.find(cat => cat.slug === slug);
+    if (!category) {
+      return res.status(404).json({ success: false, message: "Category not found" });
+    }
+
+    res.json({ success: true, data: category });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // DELETE Category by ID
 export const deleteCategory = async (req, res) => {

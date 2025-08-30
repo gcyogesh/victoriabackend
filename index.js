@@ -99,7 +99,7 @@ app.use(`/${API}/services`, ServiceRoutes);
 app.use(`/${API}/subservices`, SubServiceRoutes);
 app.use(`/${API}/team`, TeamMemberRoutes);
 // app.use(`/${API}/company`, CompanyRoutes);
-app.use(`/${API}/gallery`, GalleryRoutes);
+app.use(`/${API}/gallery`, GalleryRoutes)
 app.use(`/${API}/testimonial`, TestimonialRoutes);
 app.use(`/${API}/founders`,FounderRoutes);
 app.use(`/${API}/contactinfo`, ContactInfoRoute);
