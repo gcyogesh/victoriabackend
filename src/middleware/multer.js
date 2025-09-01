@@ -59,16 +59,16 @@ const imageFilter = (req, file, cb) => {
   }
 };
 
-// Base multer configuration
+// Base multer configuration with 1GB limit
 const baseMulterConfig = {
   storage: storage,
   fileFilter: imageFilter,
   limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB
+    fileSize: 1024 * 1024 * 1024, // 1GB
   },
 };
 
-// Upload middleware with enhanced error handling
+// Upload middlewares
 export const singleUpload = (fieldName) => multer(baseMulterConfig).single(fieldName);
 export const arrayUpload = (fieldName, maxCount) => multer(baseMulterConfig).array(fieldName, maxCount);
 
@@ -85,8 +85,6 @@ export const fieldsUpload = (fieldsConfig) => {
         console.error('Multer upload error:', err);
         
         if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-          console.error('Unexpected field received:', err.field);
-          console.error('Expected fields:', fieldsConfig.map(f => f.name));
           return res.status(400).json({
             success: false,
             message: `Unexpected field '${err.field}'. Expected fields: ${fieldsConfig.map(f => f.name).join(', ')}`,
@@ -98,7 +96,7 @@ export const fieldsUpload = (fieldsConfig) => {
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(413).json({
             success: false,
-            message: 'File size too large. Maximum 100MB allowed.'
+            message: 'File size too large. Maximum 1GB allowed.'
           });
         }
         
@@ -109,9 +107,7 @@ export const fieldsUpload = (fieldsConfig) => {
           });
         }
 
-        // Handle ENOENT errors specifically
         if (err.code === 'ENOENT') {
-          console.error('File not found error. Check upload directory permissions and path.');
           return res.status(500).json({
             success: false,
             message: 'Upload directory not accessible. Please check server configuration.',
@@ -126,7 +122,6 @@ export const fieldsUpload = (fieldsConfig) => {
         });
       }
       
-      // Log successful file uploads
       if (req.files) {
         console.log('Uploaded files:', Object.keys(req.files).map(key => ({
           field: key,
@@ -145,83 +140,36 @@ export const fieldsUpload = (fieldsConfig) => {
   };
 };
 
-// Specific middleware for blog uploads
-export const blogImageUpload = fieldsUpload([
-  { name: 'image', maxCount: 1 }
-]);
-
+// Specific middlewares
+export const blogImageUpload = fieldsUpload([{ name: 'image', maxCount: 1 }]);
 export const blogWithAuthorUpload = fieldsUpload([
   { name: 'image', maxCount: 1 },
   { name: 'authorImageUrl', maxCount: 1 }
 ]);
-// Specific middleware for feature uploads
-export const featureImageUpload = fieldsUpload([
-  { name: 'image', maxCount: 1 }
-]);
+export const featureImageUpload = fieldsUpload([{ name: 'image', maxCount: 1 }]);
 
-
-/**
- * Get full file URL with protocol and domain - FIXED FOR HTTPS
- * @param {string} filename - The filename
- * @param {object} req - Express request object (optional)
- * @returns {string} - Full URL to the file
- */
+// Helper functions for URLs and paths
 export const getFileUrl = (filename, req = null) => {
-  // Try to get base URL from environment variable first
   let baseUrl = process.env.BASE_URL;
-  
-  // If no BASE_URL in env and we have request object, construct from request
   if (!baseUrl && req) {
-    // Check for forwarded protocol (from reverse proxy like nginx)
     let protocol = req.get('x-forwarded-proto') || req.protocol;
-    
-    // Force HTTPS in production (when not localhost)
     const host = req.get('host');
-    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-      protocol = 'https';
-    }
-    
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) protocol = 'https';
     baseUrl = `${protocol}://${host}`;
-    console.log('Constructed baseUrl:', baseUrl, 'from protocol:', protocol, 'host:', host);
   }
-  
-  // Fallback to localhost if nothing else works
-  if (!baseUrl) {
-    baseUrl = 'http://localhost:5000';
-  }
-  
-  const fullUrl = `${baseUrl}/uploads/${filename}`;
-  console.log('Generated file URL:', fullUrl);
-  return fullUrl;
+  if (!baseUrl) baseUrl = 'http://localhost:5000';
+  return `${baseUrl}/uploads/${filename}`;
 };
 
-/**
- * Get full file URL with request context (recommended) - FIXED FOR HTTPS
- * @param {string} filename - The filename
- * @param {object} req - Express request object
- * @returns {string} - Full URL to the file
- */
 export const getFileUrlWithRequest = (filename, req) => {
-  // Check for forwarded protocol first (from reverse proxy)
   let protocol = req.get('x-forwarded-proto') || req.protocol;
   const host = req.get('host');
-  
-  // Force HTTPS in production (when not localhost)
-  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
-    protocol = 'https';
-  }
-  
-  const fullUrl = `${protocol}://${host}/uploads/${filename}`;
-  console.log('Generated file URL with request:', fullUrl);
-  return fullUrl;
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) protocol = 'https';
+  return `${protocol}://${host}/uploads/${filename}`;
 };
 
-// Helper to get full file path
-export const getFilePath = (filename) => {
-  return path.join(getUploadsPath(), filename);
-};
+export const getFilePath = (filename) => path.join(getUploadsPath(), filename);
 
-// Helper to delete local files
 export const deleteLocalFile = async (filename) => {
   try {
     const filePath = getFilePath(filename);
@@ -234,20 +182,12 @@ export const deleteLocalFile = async (filename) => {
   }
 };
 
-// Helper to extract filename from file path or URL
 export const getFilenameFromPath = (filePath) => {
   if (!filePath) return null;
-  
-  // Handle full URLs (e.g., http://localhost:5000/uploads/filename.jpg)
-  if (filePath.includes('/uploads/')) {
-    return filePath.split('/uploads/')[1];
-  }
-  
-  // If it's just a filename
+  if (filePath.includes('/uploads/')) return filePath.split('/uploads/')[1];
   return path.basename(filePath);
 };
 
-// Debug middleware to log form data
 export const debugFormData = (req, res, next) => {
   console.log('=== INCOMING FORM DATA DEBUG ===');
   console.log('Content-Type:', req.get('Content-Type'));
@@ -261,24 +201,15 @@ export const debugFormData = (req, res, next) => {
   next();
 };
 
-// Helper function to check if uploads directory exists and is writable
 export const checkUploadsDirectory = async () => {
   const uploadPath = getUploadsPath();
-  
   try {
-    // Check if directory exists
     await promisify(fs.access)(uploadPath, fs.constants.F_OK);
-    console.log('✓ Uploads directory exists:', uploadPath);
-    
-    // Check if directory is writable
     await promisify(fs.access)(uploadPath, fs.constants.W_OK);
-    console.log('✓ Uploads directory is writable');
-    
+    console.log('✓ Uploads directory exists and is writable');
     return true;
   } catch (error) {
     console.error('✗ Uploads directory issue:', error.message);
-    console.log('Attempting to create uploads directory...');
-    
     try {
       await promisify(fs.mkdir)(uploadPath, { recursive: true });
       console.log('✓ Created uploads directory:', uploadPath);
