@@ -142,11 +142,15 @@ export const fieldsUpload = (fieldsConfig) => {
 
 // Specific middlewares
 export const blogImageUpload = fieldsUpload([{ name: 'image', maxCount: 1 }]);
+export const aboutImageUplaod = fieldsUpload([{ name: 'image', maxCount: 1 }]);
 export const blogWithAuthorUpload = fieldsUpload([
   { name: 'image', maxCount: 1 },
   { name: 'authorImageUrl', maxCount: 1 }
 ]);
 export const featureImageUpload = fieldsUpload([{ name: 'image', maxCount: 1 }]);
+
+
+
 
 // Helper functions for URLs and paths
 export const getFileUrl = (filename, req = null) => {

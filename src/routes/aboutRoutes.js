@@ -8,7 +8,8 @@ import {
   deleteSection,
 } from "../controllers/aboutController.js";
 
-import { blogImageUpload } from "../middleware/multer.js";
+import { aboutImageUplaod } from "../middleware/multer.js";
+
 
 const router = express.Router();
 
@@ -27,7 +28,7 @@ router.options("/", (req, res) => {
 });
 
 // POST About page (create or update full data with image)
-router.post("/", blogImageUpload, createOrUpdateAbout);
+router.post("/", aboutImageUplaod, createOrUpdateAbout);
 
 // PUT Update category
 router.put("/category/:categoryId", updateCategory);
